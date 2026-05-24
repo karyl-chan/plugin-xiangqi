@@ -3,12 +3,16 @@ import { runtime } from "../runtime.js";
 
 /**
  * Lazy fairy-stockfish process pool. One engine instance per active AI
- * game (keyed by sessionId). Engines are killed after 5 minutes of
- * inactivity, or immediately on game end.
+ * game (keyed by sessionId). Engines stay alive for the duration of the
+ * game — explicit teardown via `shutdownEngine(sessionId)` happens when
+ * the game ends (move-apply.finaliseGame → cancelAiStep). The idle
+ * timer here is a 2-hour safety net for abandoned games where the
+ * normal teardown path is never reached.
  *
  * Communication uses UCI with the `UCI_Variant=xiangqi` option flipped
- * on. fairy-stockfish accepts the same `position fen`/`go depth`
- * commands and emits `bestmove e2e4`-style ICCS coordinates.
+ * on, plus Threads=2 and a 256MB hash for stronger search.
+ * fairy-stockfish accepts the same `position fen`/`go depth`/`go
+ * movetime` commands and emits `bestmove e2e4`-style ICCS coordinates.
  *
  * The binary path is taken from `XIANGQI_ENGINE_PATH` env var; defaults
  * to `fairy-stockfish` (in PATH). If the binary isn't available the
@@ -17,9 +21,15 @@ import { runtime } from "../runtime.js";
  */
 
 const ENGINE_PATH = process.env.XIANGQI_ENGINE_PATH ?? "fairy-stockfish";
-const IDLE_KILL_MS = 5 * 60_000;
-const ENGINE_READY_TIMEOUT_MS = 5_000;
+// 2-hour fallback for abandoned games. Active games shouldn't hit this —
+// finaliseGame triggers explicit shutdown on natural end.
+const IDLE_KILL_MS = 2 * 60 * 60_000;
+// Cold container start (binary load + UCI handshake) can comfortably
+// exceed 5s on a small VPS; 15s tolerates that without falling back.
+const ENGINE_READY_TIMEOUT_MS = 15_000;
 const ENGINE_GO_TIMEOUT_MS = 30_000;
+const ENGINE_THREADS = 2;
+const ENGINE_HASH_MB = 256;
 
 interface EngineSlot {
   child: ChildProcess;
@@ -114,6 +124,8 @@ async function ensureEngine(sessionId: string): Promise<EngineSlot | null> {
   send(child, "setoption name UCI_Variant value xiangqi");
   // Some builds of fairy-stockfish look for `UCI_Chess960` etc.; the
   // variant name is the load-bearing knob here.
+  send(child, `setoption name Threads value ${ENGINE_THREADS}`);
+  send(child, `setoption name Hash value ${ENGINE_HASH_MB}`);
   send(child, "isready");
   const ok = await waitForReady(child, ENGINE_READY_TIMEOUT_MS);
   if (!ok) {
@@ -201,20 +213,30 @@ export async function bestMove(
       timer,
     });
     send(slot.child, `position fen ${opts.fen}`);
-    const goLine = opts.movetimeMs
-      ? `go movetime ${opts.movetimeMs}`
-      : `go depth ${opts.depth}`;
+    // Combined `go depth N movetime M` lets the engine stop at whichever
+    // limit fires first — depth bounds endgame think-time, movetime
+    // bounds midgame wall-time. Both supplied = explicit dual cap.
+    const goLine =
+      opts.movetimeMs != null
+        ? `go depth ${opts.depth} movetime ${opts.movetimeMs}`
+        : `go depth ${opts.depth}`;
     send(slot.child, goLine);
   });
 }
 
-export function depthForLevel(level: "easy" | "normal" | "hard"): number {
+export function engineParamsForLevel(
+  level: "easy" | "normal" | "hard",
+): { depth: number; movetimeMs?: number } {
   switch (level) {
     case "easy":
-      return 4;
+      return { depth: 4 };
     case "normal":
-      return 8;
+      return { depth: 8 };
     case "hard":
-      return 12;
+      // depth 20 with a 5s movetime cap: lets the engine search deep on
+      // tactical positions but bounds wall time so AI replies stay
+      // snappy. Combined with Threads=2 + Hash=256MB this is meaningfully
+      // stronger than the previous depth-12-only setting.
+      return { depth: 20, movetimeMs: 5_000 };
   }
 }

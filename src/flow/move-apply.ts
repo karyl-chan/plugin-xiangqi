@@ -19,6 +19,7 @@ import { retainEndedGame } from "../game/store.js";
 import { renderBoardText } from "../game/render.js";
 import { sendMessage } from "./discord.js";
 import { notifyGameChanged } from "./sse.js";
+import { cancelAiStep } from "../engine/npc-driver.js";
 import { t, sideZh } from "../i18n/index.js";
 
 /**
@@ -146,6 +147,10 @@ function finaliseGame(
   else state.status = "draw";
   state.result = { winner: winner ?? undefined, reason, at };
   state.endedAt = at;
+  // Engine is kept alive for the full game (no idle-kill during active
+  // play). Shut it down here on natural end so we don't leak the process
+  // until the 2-hour abandoned-game fallback fires.
+  cancelAiStep(state.sessionId);
   retainEndedGame(state);
 }
 

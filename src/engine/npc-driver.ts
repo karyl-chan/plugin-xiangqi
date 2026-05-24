@@ -6,7 +6,7 @@ import { parseIccs } from "../xiangqi/notation/parse-iccs.js";
 import { applyMoveToGame } from "../flow/move-apply.js";
 import { tickClockOnMove } from "../flow/clock.js";
 import { type GameState, type AiLevel } from "../game/state.js";
-import { bestMove, depthForLevel, shutdownEngine } from "./stockfish.js";
+import { bestMove, engineParamsForLevel, shutdownEngine } from "./stockfish.js";
 
 /**
  * Schedule the AI's next move. Called after every non-AI move (the
@@ -62,7 +62,7 @@ async function runOneStep(state: GameState, level: AiLevel): Promise<void> {
     const fen = toFen(state.board);
     let uci: string | null = null;
     try {
-      uci = await bestMove(state.sessionId, { fen, depth: depthForLevel(level) });
+      uci = await bestMove(state.sessionId, { fen, ...engineParamsForLevel(level) });
     } catch (e) {
       runtime().log.warn("xiangqi: engine bestMove threw", {
         err: (e as Error).message,
