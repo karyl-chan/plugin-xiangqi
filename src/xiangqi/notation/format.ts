@@ -40,7 +40,7 @@ function disambigPrefix(
   kind: PieceKind,
   side: Side,
   from: Square,
-): "前" | "中" | "後" | null {
+): string | null {
   if (!FRONT_BACK_KINDS.includes(kind)) return null;
   const onFile: Square[] = [];
   for (let r = 0; r < 10; r++) {
@@ -50,15 +50,22 @@ function disambigPrefix(
   if (onFile.length < 2) return null;
   onFile.sort((a, b) => (side === "red" ? b.row - a.row : a.row - b.row));
   const idx = onFile.findIndex((s) => s.row === from.row && s.col === from.col);
-  if (idx === 0) return "前";
-  if (idx === onFile.length - 1) return "後";
-  return "中";
+  // 2-3 same-file: 前/中/後 is the conventional spelling.
+  if (onFile.length <= 3) {
+    if (idx === 0) return "前";
+    if (idx === onFile.length - 1) return "後";
+    return "中";
+  }
+  // ≥4 same-file (only pawns can reach this — chariots, horses, cannons
+  // top out at 2 per side): switch to positional 一/二/三/四/五 (red) or
+  // 1/2/3/4/5 (black) so every slot has a unique name.
+  return digit(side, idx + 1);
 }
 
 /**
  * Render a move in Chinese notation against the PRE-move board (so the
  * mover's piece is still at `from`). Two-on-a-file is disambiguated with
- * 前/中/後 instead of the file digit.
+ * 前/中/後; ≥4 pawns on a file switch to positional digits.
  */
 export function toChinese(board: Board, from: Square, to: Square): string {
   const piece = getCell(board, from);

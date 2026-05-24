@@ -189,4 +189,75 @@ describe("Chinese formatter", () => {
     const s = toChinese(b, { row: 4, col: 1 }, { row: 4, col: 0 });
     expect(s.startsWith("前")).toBe(true);
   });
+
+  it("uses 一/二/三/四/五 for ≥4 pawns on a file", () => {
+    // 5 red pawns all on column 4 at rows 2, 4, 5, 6, 8.
+    // sorted_from_front = [row 8, row 6, row 5, row 4, row 2]; row 5 = 三.
+    const fen =
+      "rnbakabnr/4P4/9/4P4/4P4/4P4/9/4P4/9/RNBAKABNR w - - 0 1";
+    const b = parseFen(fen);
+    const s = toChinese(b, { row: 5, col: 4 }, { row: 5, col: 3 });
+    expect(s).toBe("三兵平六");
+  });
+});
+
+describe("Chinese parser — positional pawn disambiguation", () => {
+  // 5 red pawns on column 4 (red file 5) at rows 2, 4, 5, 6, 8.
+  // sorted_from_front: [row 8, row 6, row 5, row 4, row 2].
+  const fivePawns =
+    "rnbakabnr/4P4/9/4P4/4P4/4P4/9/4P4/9/RNBAKABNR w - - 0 1";
+
+  it("三兵平六 picks sorted[2] (third from front)", () => {
+    const b = parseFen(fivePawns);
+    expect(parseChinese("三兵平六", b, "red")).toEqual({
+      from: { row: 5, col: 4 },
+      to: { row: 5, col: 3 },
+    });
+  });
+
+  it("Arabic '3兵平六' equivalent to 三兵平六", () => {
+    const b = parseFen(fivePawns);
+    expect(parseChinese("3兵平六", b, "red")).toEqual({
+      from: { row: 5, col: 4 },
+      to: { row: 5, col: 3 },
+    });
+  });
+
+  it("前兵 still resolves to sorted[0] with 5 same-file pawns", () => {
+    // Sorted[0] is row 8; sideways to col 3 stays in range and is legal.
+    const b = parseFen(fivePawns);
+    expect(parseChinese("前兵平六", b, "red")).toEqual({
+      from: { row: 8, col: 4 },
+      to: { row: 8, col: 3 },
+    });
+  });
+
+  it("中兵 rejected with ≥4 same-file pawns (no well-defined middle)", () => {
+    const b = parseFen(fivePawns);
+    expect(parseChinese("中兵平六", b, "red")).toBeNull();
+  });
+
+  it("中兵 still works with exactly 3 same-file pawns", () => {
+    // 3 red pawns at rows 4, 5, 7 on column 4. sorted = [7, 5, 4]; 中 = row 5.
+    const fen =
+      "rnbakabnr/9/4P4/9/4P4/4P4/9/9/9/RNBAKABNR w - - 0 1";
+    const b = parseFen(fen);
+    expect(parseChinese("中兵平六", b, "red")).toEqual({
+      from: { row: 5, col: 4 },
+      to: { row: 5, col: 3 },
+    });
+  });
+
+  it("positional digit rejected when only 2 same-file pawns (need ≥3)", () => {
+    // 2 red pawns at rows 5 and 6 on column 4.
+    const fen =
+      "rnbakabnr/9/9/4P4/4P4/9/9/9/9/RNBAKABNR w - - 0 1";
+    const b = parseFen(fen);
+    expect(parseChinese("三兵平六", b, "red")).toBeNull();
+  });
+
+  it("positional digit rejected for non-pawn (other pieces use 前/後)", () => {
+    const b = parseFen(fivePawns);
+    expect(parseChinese("三炮平六", b, "red")).toBeNull();
+  });
 });

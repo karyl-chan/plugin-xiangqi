@@ -6,9 +6,12 @@ import { findPiecesOnFile, sortFromFront } from "./_shared.js";
 import type { ParsedMove } from "./parse-iccs.js";
 
 /**
- * Chinese (traditional) move notation. Four-character format, with
- * special two-piece disambiguation that swaps the first two characters
- * for 前/中/後 prefixes.
+ * Chinese (traditional) move notation. Four-character format, with two
+ * flavours of front-rank disambiguation:
+ *
+ *   <piece><file><action><param>      regular form
+ *   <前|中|後><piece><action><param>  front/back disambig (2-3 same-file)
+ *   <N><pawn><action><param>          positional disambig (3+ same-file pawns)
  *
  * Examples
  *   炮二平五   → cannon file 2 → file 5  (red, Chinese digits)
@@ -16,6 +19,18 @@ import type { ParsedMove } from "./parse-iccs.js";
  *   馬八進七   → horse file 8 → file 7   (black, Chinese digits — also OK)
  *   車1進1    → chariot file 1 → advance 1 rank
  *   前馬退六   → front horse retreats to file 6
+ *   三兵平六   → the 3rd-from-front pawn on its file moves sideways to file 6
+ *
+ * Disambiguation rules:
+ *   • 前 / 後 — pick front-most / back-most when ≥2 same-kind same-file. Works
+ *     for chariot, horse, cannon, pawn.
+ *   • 中 — only valid when exactly 3 same-kind same-file (sorted[1]). With ≥4
+ *     same-file the middle isn't well-defined, so we reject and force the
+ *     positional form.
+ *   • <一|二|三|四|五|1|2|3|4|5><兵|卒> — only for pawns and only when ≥3 same-
+ *     file pawns. `N` indexes from the front (sorted[N-1]). This is the
+ *     standard notation when ≥4 pawns occupy one file — the 前/中/後 vocabulary
+ *     only spans 3 positions.
  *
  * Lenient rules (per UX request):
  *   • Piece glyphs are interchangeable across sides (車/俥, 馬/傌, 炮/砲,
@@ -56,6 +71,14 @@ function canonAction(ch: string): "進" | "退" | "平" | null {
 
 const FRONT_BACK_GLYPHS = new Set(["前", "後", "中"]);
 const FRONT_BACK_KINDS: PieceKind[] = ["chariot", "horse", "cannon", "pawn"];
+
+/** Decode 一/二/三/四/五 or 1-5 as a 0-based front-counting index, else null. */
+function positionalIndex(ch: string): number | null {
+  const idx = CN_DIGITS.indexOf(ch);
+  if (idx >= 0 && idx < 5) return idx;
+  if (/^[1-5]$/.test(ch)) return Number.parseInt(ch, 10) - 1;
+  return null;
+}
 
 function resolveDestination(
   side: Side,
@@ -112,28 +135,48 @@ export function parseChinese(
   let kind: PieceKind | null = null;
   let from: Square | null = null;
 
+  const positionalIdx = positionalIndex(c0);
+
   if (FRONT_BACK_GLYPHS.has(c0)) {
-    // Disambig form: <前|中|後><piece><action><param>
+    // <前|中|後><piece><action><param>
     const glyphKind = CN_GLYPH_TO_KIND[c1];
     if (!glyphKind) return null;
     if (!FRONT_BACK_KINDS.includes(glyphKind)) return null;
     kind = glyphKind;
-    // Find the file that holds 2+ same-kind same-side pieces.
+    // Predicate per prefix:
+    //   前 / 後 — any file with ≥2 same-kind pieces
+    //   中     — only files with exactly 3 (otherwise the middle slot is
+    //            ambiguous; with ≥4 the standard notation switches to
+    //            <N><兵|卒>, parsed below)
+    const matches = (n: number): boolean =>
+      c0 === "中" ? n === 3 : n >= 2;
     for (let c = 0; c < COLS; c++) {
       const sq = findPiecesOnFile(board, side, kind, c);
-      if (sq.length >= 2) {
+      if (matches(sq.length)) {
         const sorted = sortFromFront(side, sq);
         if (c0 === "前") from = sorted[0];
         else if (c0 === "後") from = sorted[sorted.length - 1];
-        else if (c0 === "中") {
-          if (sq.length < 3) return null;
-          from = sorted[1];
-        }
+        else if (c0 === "中") from = sorted[1];
+        break;
+      }
+    }
+  } else if (positionalIdx !== null) {
+    // <一|二|三|四|五|1-5><兵|卒><action><param>. Standard notation when
+    // ≥4 same-side pawns share a file (and accepted as an alternative
+    // spelling of 前/後/中 when there are 3).
+    const glyphKind = CN_GLYPH_TO_KIND[c1];
+    if (!glyphKind || glyphKind !== "pawn") return null;
+    kind = glyphKind;
+    for (let c = 0; c < COLS; c++) {
+      const sq = findPiecesOnFile(board, side, kind, c);
+      if (sq.length >= 3 && positionalIdx < sq.length) {
+        const sorted = sortFromFront(side, sq);
+        from = sorted[positionalIdx];
         break;
       }
     }
   } else {
-    // Regular form: <piece><file><action><param>
+    // <piece><file><action><param>
     const glyphKind = CN_GLYPH_TO_KIND[c0];
     if (!glyphKind) return null;
     kind = glyphKind;
