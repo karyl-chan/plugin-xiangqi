@@ -25,7 +25,12 @@ RUN case "$TARGETARCH" in \
     make -j"$(nproc)" net && \
     make -j"$(nproc)" build ARCH="$PKARCH" && \
     install -Dm0755 pikafish /out/usr/local/bin/pikafish && \
-    install -Dm0644 ../*.nnue /out/usr/local/bin/pikafish.nnue
+    # `make net` drops the NNUE file under /pf — exact name varies
+    # between releases (`pikafish.nnue` vs `pikafish-<sha>.nnue`), so
+    # find rather than glob.
+    NNUE=$(find /pf -maxdepth 3 -name '*.nnue' -print -quit) && \
+    test -n "$NNUE" || { echo "Pikafish NNUE file not found after make net" >&2; exit 1; } && \
+    install -Dm0644 "$NNUE" /out/usr/local/bin/pikafish.nnue
 
 # ── build ─────────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-trixie-slim AS build
