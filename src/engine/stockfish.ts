@@ -2,25 +2,29 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { runtime } from "../runtime.js";
 
 /**
- * Lazy fairy-stockfish process pool. One engine instance per active AI
- * game (keyed by sessionId). Engines stay alive for the duration of the
- * game — explicit teardown via `shutdownEngine(sessionId)` happens when
- * the game ends (move-apply.finaliseGame → cancelAiStep). The idle
- * timer here is a 2-hour safety net for abandoned games where the
+ * Lazy UCI xiangqi engine process pool. One engine instance per active
+ * AI game (keyed by sessionId). Engines stay alive for the duration of
+ * the game — explicit teardown via `shutdownEngine(sessionId)` happens
+ * when the game ends (move-apply.finaliseGame → cancelAiStep). The
+ * idle timer here is a 2-hour safety net for abandoned games where the
  * normal teardown path is never reached.
  *
- * Communication uses UCI with the `UCI_Variant=xiangqi` option flipped
- * on, plus Threads=2 and a 256MB hash for stronger search.
- * fairy-stockfish accepts the same `position fen`/`go depth`/`go
- * movetime` commands and emits `bestmove e2e4`-style ICCS coordinates.
+ * Production runtime ships Pikafish (xiangqi-specialised Stockfish fork
+ * with NNUE eval; ~3200 Elo). The handshake also sends the
+ * `UCI_Variant=xiangqi` option for fairy-stockfish compatibility in
+ * dev mode — Pikafish ignores unknown setoption lines.
+ *
+ * Both engines accept `position fen` + `go depth` / `go movetime` and
+ * emit `bestmove e2e4`-style ICCS coordinates.
  *
  * The binary path is taken from `XIANGQI_ENGINE_PATH` env var; defaults
- * to `fairy-stockfish` (in PATH). If the binary isn't available the
- * plugin still loads — `bestMove` returns null and AI games fall back
- * to a random legal move at the higher layer.
+ * to `pikafish` (in PATH). If the binary isn't available the plugin
+ * still loads — `bestMove` returns null and AI games fall back to a
+ * random legal move at the higher layer (with a warn log explaining
+ * why).
  */
 
-const ENGINE_PATH = process.env.XIANGQI_ENGINE_PATH ?? "fairy-stockfish";
+const ENGINE_PATH = process.env.XIANGQI_ENGINE_PATH ?? "pikafish";
 // 2-hour fallback for abandoned games. Active games shouldn't hit this —
 // finaliseGame triggers explicit shutdown on natural end.
 const IDLE_KILL_MS = 2 * 60 * 60_000;
@@ -119,20 +123,31 @@ async function ensureEngine(sessionId: string): Promise<EngineSlot | null> {
     killEngine(sessionId);
   });
 
-  // UCI handshake
+  // UCI handshake. UCI_Variant is a fairy-stockfish-only option and is
+  // silently ignored by Pikafish; sending it keeps dev mode working
+  // when XIANGQI_ENGINE_PATH points at fairy-stockfish.
   send(child, "uci");
   send(child, "setoption name UCI_Variant value xiangqi");
-  // Some builds of fairy-stockfish look for `UCI_Chess960` etc.; the
-  // variant name is the load-bearing knob here.
   send(child, `setoption name Threads value ${ENGINE_THREADS}`);
   send(child, `setoption name Hash value ${ENGINE_HASH_MB}`);
   send(child, "isready");
   const ok = await waitForReady(child, ENGINE_READY_TIMEOUT_MS);
   if (!ok) {
+    runtime().log.warn("xiangqi: engine handshake timed out", {
+      sessionId,
+      enginePath: ENGINE_PATH,
+      timeoutMs: ENGINE_READY_TIMEOUT_MS,
+    });
     killEngine(sessionId);
     return null;
   }
   slot.ready = true;
+  runtime().log.info("xiangqi: engine ready", {
+    sessionId,
+    enginePath: ENGINE_PATH,
+    threads: ENGINE_THREADS,
+    hashMb: ENGINE_HASH_MB,
+  });
 
   engines.set(sessionId, slot);
   armIdleTimer(sessionId, slot);

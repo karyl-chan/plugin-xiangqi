@@ -72,12 +72,13 @@ async function runOneStep(state: GameState, level: AiLevel): Promise<void> {
     let from = { row: -1, col: -1 };
     let to = { row: -1, col: -1 };
     let resolved = false;
+    let parseFailed = false;
+    let illegal = false;
     if (uci) {
       const parsed = parseIccs(uci);
       if (parsed) {
         from = parsed.from;
         to = parsed.to;
-        // Sanity check legality.
         const legal = allLegalMoves(state.board, side).some(
           (m) =>
             m.from.row === from.row &&
@@ -86,9 +87,29 @@ async function runOneStep(state: GameState, level: AiLevel): Promise<void> {
             m.to.col === to.col,
         );
         if (legal) resolved = true;
+        else illegal = true;
+      } else {
+        parseFailed = true;
       }
     }
     if (!resolved) {
+      // Diagnostic: distinguishes "engine missing / timed out" (uci=null)
+      // from "engine spoke gibberish" (parse failed) from "engine's idea
+      // was illegal" (rules-layer rejected). Without this every random
+      // fallback looked identical and silently masked real failures.
+      runtime().log.warn("xiangqi: ai falling back to random legal move", {
+        sessionId: state.sessionId,
+        level,
+        reason: !uci
+          ? "engine_returned_null"
+          : parseFailed
+            ? "uci_parse_failed"
+            : illegal
+              ? "engine_move_illegal"
+              : "unknown",
+        uci,
+        fen,
+      });
       const legal = allLegalMoves(state.board, side);
       if (legal.length === 0) return; // checkmate/stalemate — applier already finalised
       const pick = legal[Math.floor(Math.random() * legal.length)];
