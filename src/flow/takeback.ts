@@ -1,0 +1,197 @@
+import type {
+  CommandContext,
+  CommandReply,
+  ComponentContext,
+  ComponentReply,
+} from "@karyl-chan/plugin-sdk";
+import { t, sideZh } from "../i18n/index.js";
+import { getGame, withChannelLock } from "../game/store.js";
+import { sideOf, positionKey, type GameState } from "../game/state.js";
+import { initialBoard } from "../xiangqi/board.js";
+import { applyMove } from "../xiangqi/moves.js";
+import { notifyGameChanged } from "./sse.js";
+import { sendMessage, buttonRow, buildCustomId, ephemeralFollowup } from "./discord.js";
+
+/**
+ * Takeback semantics:
+ *   • vs human: the requester is offered up. The opponent must approve;
+ *     once approved, the last N plies are rolled back (N = 1 by default,
+ *     2 if it isn't the requester's turn — so they actually undo their
+ *     own last move).
+ *   • vs AI: no opponent ack needed; immediately retract 2 plies (the
+ *     AI's last move + the human's last move) so the human is back to
+ *     move from a state they were happy with.
+ */
+
+function rollbackPlies(state: GameState, n: number): void {
+  const target = state.history.length - n;
+  if (target < 0) return;
+  // Re-replay from initial position. v1 always starts from initialBoard;
+  // if custom starting positions are ever added, this should reset from
+  // a stored starting FEN on GameState instead.
+  const fresh = initialBoard();
+  state.board = fresh;
+  const keepHistory = state.history.slice(0, target);
+  state.history = keepHistory;
+  state.positionKeys = [positionKey(fresh)];
+  for (const mv of keepHistory) {
+    applyMove(state.board, mv.from, mv.to);
+    state.positionKeys.push(positionKey(state.board));
+  }
+}
+
+export type TakebackOfferOutcome =
+  | { kind: "offered"; plies: 1 | 2 }
+  | { kind: "applied_ai"; plies: 1 | 2 }
+  | { kind: "no_history" };
+
+import { type Side } from "../xiangqi/pieces.js";
+
+function pliesForRequester(game: GameState, side: Side): 1 | 2 {
+  return game.board.sideToMove === side
+    ? game.history.length >= 2
+      ? 2
+      : 1
+    : 1;
+}
+
+/**
+ * Pure helpers shared by Discord + WebUI. The caller holds the channel
+ * lock and has already validated the actor's side. vs-AI takebacks
+ * apply immediately; vs-human ones post an offer that either side can
+ * resolve from either UI.
+ */
+export async function applyOfferTakebackBySide(
+  game: GameState,
+  side: Side,
+): Promise<TakebackOfferOutcome> {
+  if (game.history.length === 0) return { kind: "no_history" };
+  const opponent = side === "red" ? game.black : game.red;
+  const plies = pliesForRequester(game, side);
+
+  if (opponent.kind === "ai") {
+    rollbackPlies(game, plies);
+    notifyGameChanged(game.channelId);
+    await sendMessage({
+      channelId: game.channelId,
+      content: t(undefined, "takeback.appliedAi", { plies }),
+    });
+    return { kind: "applied_ai", plies };
+  }
+
+  game.takebackOffer = { from: side, plies, at: Date.now() };
+  notifyGameChanged(game.channelId);
+  await sendMessage({
+    channelId: game.channelId,
+    content: t(undefined, "takeback.offered", {
+      sideZh: sideZh(side),
+      plies,
+    }),
+    components: [
+      buttonRow([
+        {
+          label: t(undefined, "takeback.acceptBtn"),
+          customId: buildCustomId("tb-acc", game.sessionId),
+          style: 3,
+        },
+        {
+          label: t(undefined, "takeback.declineBtn"),
+          customId: buildCustomId("tb-dec", game.sessionId),
+          style: 4,
+        },
+      ]),
+    ],
+  });
+  return { kind: "offered", plies };
+}
+
+export function applyAcceptTakebackBySide(game: GameState): { plies: 1 | 2 } {
+  const plies = game.takebackOffer!.plies;
+  rollbackPlies(game, plies);
+  game.takebackOffer = undefined;
+  notifyGameChanged(game.channelId);
+  return { plies };
+}
+
+export function applyDeclineTakebackBySide(game: GameState): void {
+  game.takebackOffer = undefined;
+  notifyGameChanged(game.channelId);
+}
+
+export async function handleTakeback(ctx: CommandContext): Promise<CommandReply> {
+  const channelId = ctx.channelId;
+  if (!channelId) return t(undefined, "error.notInGuild");
+  return withChannelLock(channelId, async () => {
+    const game = getGame(channelId);
+    if (!game || game.status !== "active") {
+      return { content: t(undefined, "error.noGame"), ephemeral: true };
+    }
+    const side = sideOf(game, ctx.userId);
+    if (!side) return { content: t(undefined, "error.notPlayer"), ephemeral: true };
+    const outcome = await applyOfferTakebackBySide(game, side);
+    if (outcome.kind === "no_history") {
+      return { content: t(undefined, "error.noGame"), ephemeral: true };
+    }
+    if (outcome.kind === "applied_ai") {
+      return { content: t(undefined, "takeback.appliedAi", { plies: outcome.plies }) };
+    }
+    return {
+      content: t(undefined, "takeback.offered", {
+        sideZh: sideZh(side),
+        plies: outcome.plies,
+      }),
+      ephemeral: true,
+    };
+  });
+}
+
+export async function handleTakebackAcceptButton(
+  ctx: ComponentContext,
+  sessionId: string,
+): Promise<ComponentReply> {
+  const channelId = ctx.channelId;
+  if (!channelId) {
+    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    return;
+  }
+  return withChannelLock(channelId, async () => {
+    const game = getGame(channelId);
+    if (!game || game.sessionId !== sessionId || !game.takebackOffer) {
+      await ephemeralFollowup(ctx, t(undefined, "error.noGame"));
+      return;
+    }
+    const side = sideOf(game, ctx.userId);
+    if (!side || side === game.takebackOffer.from) {
+      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      return;
+    }
+    const { plies } = applyAcceptTakebackBySide(game);
+    return { content: t(undefined, "takeback.applied", { plies }), components: [] };
+  });
+}
+
+export async function handleTakebackDeclineButton(
+  ctx: ComponentContext,
+  sessionId: string,
+): Promise<ComponentReply> {
+  const channelId = ctx.channelId;
+  if (!channelId) {
+    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    return;
+  }
+  return withChannelLock(channelId, async () => {
+    const game = getGame(channelId);
+    if (!game || game.sessionId !== sessionId || !game.takebackOffer) {
+      await ephemeralFollowup(ctx, t(undefined, "error.noGame"));
+      return;
+    }
+    const side = sideOf(game, ctx.userId);
+    if (!side || side === game.takebackOffer.from) {
+      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      return;
+    }
+    applyDeclineTakebackBySide(game);
+    return { content: t(undefined, "takeback.declined"), components: [] };
+  });
+}
+

@@ -1,0 +1,137 @@
+:root {
+  --bg: #1a1612;
+  --panel: #25201b;
+  --board: #d2a05e;
+  --board-line: #5e3a13;
+  --piece-red: #c0392b;
+  --piece-black: #2c3e50;
+  --piece-bg: #f4e9d0;
+  --text: #ece4d3;
+  --muted: #8a8378;
+  --accent: #d4b15f;
+  --danger: #b23939;
+  --ok: #4f9a52;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+}
+@media (max-width: 880px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+button {
+  font: inherit;
+  background: #3a3128;
+  color: var(--text);
+  border: 1px solid #4a3f33;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: #4a3f33;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.danger { background: var(--danger); border-color: var(--danger); }
+button.ok { background: var(--ok); border-color: var(--ok); }
+
+.banner-win, .banner-draw, .banner-aborted {
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  text-align: center;
+  font-weight: 600;
+}
+.banner-win { background: var(--ok); color: white; }
+.banner-draw { background: var(--muted); color: #1a1612; }
+.banner-aborted { background: var(--danger); color: white; }
+
+.move-list {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 13px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #1a1612;
+  padding: 8px;
+  border-radius: 6px;
+}
+.move-list .row {
+  display: grid;
+  grid-template-columns: 28px 1fr 1fr;
+  gap: 6px;
+  padding: 2px 0;
+}
+.move-list .row .idx { color: var(--muted); }
+
+.player-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 6px;
+}
+.player-card.active {
+  outline: 2px solid var(--accent);
+}
+.player-card .name { font-weight: 600; }
+.player-card .clock {
+  font-family: monospace;
+  margin-left: auto;
+  font-size: 14px;
+}
+.player-card .badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.player-card .badge.red { background: var(--piece-red); }
+.player-card .badge.black { background: var(--piece-black); }
+
+.action-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.offer-card {
+  background: #1a1612;
+  border: 1px solid #4a3f33;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+}
+.subtle { color: var(--muted); font-size: 13px; }
+.kbd { font-family: monospace; background: #1a1612; padding: 1px 5px; border-radius: 3px; }
