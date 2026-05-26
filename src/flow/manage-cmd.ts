@@ -21,7 +21,8 @@ export async function handleManage(ctx: CommandContext): Promise<CommandReply> {
   const url = `${base.replace(/\/+$/, "")}/?token=${res.token}&mode=manage`;
   return {
     content: `🛠 **${t(undefined, "manage.title")}**\n${t(undefined, "manage.description")}`,
-    components: [linkButtonRow(`🛠 ${t(undefined, "manage.openButton")}`, url)],
+    // `manage.openButton` already contains the icon prefix — don't double it.
+    components: [linkButtonRow(t(undefined, "manage.openButton"), url)],
     ephemeral: true,
   };
 }
