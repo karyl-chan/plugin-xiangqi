@@ -90,8 +90,9 @@ pnpm dev          # watch mode
 - 走子主流程 (`flow/move-apply.ts`) 是唯一 chokepoint — 頻道訊息、WebUI
   action、AI timer 三路全部透過它，保證一處驗證、一處 SSE 推送、一處
   Echo 邏輯。
-- 訊息監聽 (`/events`) 需自行 HMAC 驗證 — SDK 只內建 `/commands`、
-  `/components` 的驗證；本 plugin 用 SDK 公開的 `verifyV0/verifyV1` +
-  `getDispatchHmacKey()` 自己驗。
+- 訊息監聽 (`guild.message_create`) 透過 SDK 的 `eventHandlers` 接收 —
+  SDK 內建 `/events` 路由、HMAC 驗證、JSON 解析；本 plugin 只在
+  `definePlugin({ eventHandlers })` 註冊 handler，將 payload 轉接到
+  `flow/move-watcher.ts`。SDK ≥ 0.4 起的 L-1 lockdown 後行為。
 - 對局狀態純記憶體；plugin 重啟即丟。Bot 重啟導致 plugin token 失效時，
   SDK 會自動重註冊。
