@@ -18,7 +18,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@karyl-chan/plugin-sdk": "^0.2.0"
+    "@karyl-chan/plugin-sdk": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
