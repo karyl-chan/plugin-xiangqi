@@ -16,8 +16,8 @@
         {{ snapshot.drawOffer.from === 'red' ? '紅' : '黑' }}方提議和棋。
       </div>
       <div class="action-row" v-if="canRespondToDraw">
-        <button class="ok" @click="$emit('draw-accept')">接受</button>
-        <button @click="$emit('draw-decline')">拒絕</button>
+        <AppButton variant="primary" size="sm" @click="$emit('draw-accept')">接受</AppButton>
+        <AppButton variant="secondary" size="sm" @click="$emit('draw-decline')">拒絕</AppButton>
       </div>
       <div v-else-if="snapshot.drawOffer.from === snapshot.viewerRole" class="subtle">
         等待對手回應…
@@ -29,8 +29,8 @@
         {{ snapshot.takebackOffer.plies }} 手。
       </div>
       <div class="action-row" v-if="canRespondToTakeback">
-        <button class="ok" @click="$emit('takeback-accept')">同意</button>
-        <button @click="$emit('takeback-decline')">拒絕</button>
+        <AppButton variant="primary" size="sm" @click="$emit('takeback-accept')">同意</AppButton>
+        <AppButton variant="secondary" size="sm" @click="$emit('takeback-decline')">拒絕</AppButton>
       </div>
       <div v-else-if="snapshot.takebackOffer.from === snapshot.viewerRole" class="subtle">
         等待對手回應…
@@ -38,9 +38,9 @@
     </div>
 
     <div class="action-row" v-if="snapshot.status === 'active' && snapshot.viewerRole !== 'spectator'">
-      <button class="danger" @click="$emit('resign')" :disabled="busy">投降</button>
-      <button @click="$emit('draw')" :disabled="busy || !!snapshot.drawOffer">提和</button>
-      <button @click="$emit('takeback')" :disabled="busy || !!snapshot.takebackOffer">悔棋</button>
+      <AppButton variant="danger" size="sm" :disabled="busy" @click="$emit('resign')">投降</AppButton>
+      <AppButton variant="secondary" size="sm" :disabled="busy || !!snapshot.drawOffer" @click="$emit('draw')">提和</AppButton>
+      <AppButton variant="secondary" size="sm" :disabled="busy || !!snapshot.takebackOffer" @click="$emit('takeback')">悔棋</AppButton>
     </div>
 
     <h4 style="margin-top:16px">棋譜</h4>
@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { AppButton } from "@karyl-chan/ui";
 
 interface SidebarSnapshot {
   status: string;

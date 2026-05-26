@@ -18,7 +18,13 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@karyl-chan/plugin-sdk": "^0.6.1"
+    "@iconify/vue": "^5.0.0",
+    "@karyl-chan/plugin-sdk": "^0.6.1",
+    "@karyl-chan/ui": "^0.1.0",
+    "@popperjs/core": "^2.11.8",
+    "nanoid": "^3.3.11",
+    "pinia": "^3.0.4",
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
