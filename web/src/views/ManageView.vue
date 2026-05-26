@@ -16,37 +16,19 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import {
-  manageListGames,
-  manageStopGame,
-  refreshManageToken,
-  saveManageSession,
-  type ManageSession,
-} from "../api";
+import { manageListGames, manageStopGame } from "../api";
 
-const props = defineProps<{ session: ManageSession }>();
-const session = ref<ManageSession>(props.session);
+// Access-token refresh is handled by the SDK's PluginApi wrapper —
+// this view just calls the typed endpoints and lets the orchestrator
+// retry transparently.
+
 const loading = ref(true);
 const games = ref<Array<{ sessionId: string; channelId: string; red: { displayName: string }; black: { displayName: string }; plies: number }>>([]);
-
-async function withRefresh<T>(fn: (s: ManageSession) => Promise<T>): Promise<T> {
-  try {
-    return await fn(session.value);
-  } catch (e) {
-    if ((e as Error).message.includes("401")) {
-      const refreshed = await refreshManageToken(session.value.refreshToken);
-      saveManageSession(refreshed);
-      session.value = refreshed;
-      return fn(session.value);
-    }
-    throw e;
-  }
-}
 
 async function refresh(): Promise<void> {
   loading.value = true;
   try {
-    games.value = (await withRefresh((s) => manageListGames(s))) as typeof games.value;
+    games.value = (await manageListGames()) as typeof games.value;
   } catch (e) {
     console.warn(e);
   } finally {
@@ -56,7 +38,7 @@ async function refresh(): Promise<void> {
 
 async function onStop(channelId: string): Promise<void> {
   if (!confirm("確定要強制中斷此對局？")) return;
-  await withRefresh((s) => manageStopGame(s, channelId));
+  await manageStopGame(channelId);
   await refresh();
 }
 

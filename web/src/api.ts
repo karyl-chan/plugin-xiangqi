@@ -1,193 +1,102 @@
-declare global {
-  interface Window {
-    __PLUGIN_BASE__?: string;
-  }
-}
+// Browser-side API client for the xiangqi SPA. Built on
+// @karyl-chan/plugin-sdk/web's `bootstrapPluginSession` orchestrator —
+// JWT decode, manage exchange, refresh, sessionStorage restore and
+// the authed fetch wrapper all live inside the SessionHandle owned by
+// App.vue. This module exposes the typed feature endpoints; it
+// receives the `PluginApi` via `setApi` once bootstrap resolves.
 
-function apiBase(): string {
-  const base = window.__PLUGIN_BASE__ ?? "";
-  return `${location.origin}${base}`;
-}
+import { API_BASE, type PluginApi } from "@karyl-chan/plugin-sdk/web";
 
+/** Channel + session-id pair the game-board SPA was opened with. The
+ *  authentication token used to live here too; that's now owned by
+ *  the SDK's auth state and reached via `pluginApi().request(...)`. */
 export interface GameSession {
-  token: string;
   channelId: string;
   sessionId: string;
 }
 
-export interface ManageSession {
-  accessToken: string;
-  refreshToken: string;
-  accessExpiresAt: number;
-  refreshExpiresAt: number;
+let _api: PluginApi | null = null;
+
+export function setApi(api: PluginApi): void {
+  _api = api;
 }
 
-const GAME_SESSION_KEY = "karyl-xiangqi:gameSession";
-const MANAGE_SESSION_KEY = "karyl-xiangqi:manageSession";
-
-export function loadGameSession(): GameSession | null {
-  try {
-    const raw = sessionStorage.getItem(GAME_SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
+function pluginApi(): PluginApi {
+  if (!_api) {
+    throw new Error("xiangqi api used before bootstrapPluginSession resolved");
   }
+  return _api;
 }
 
-export function saveGameSession(s: GameSession): void {
-  sessionStorage.setItem(GAME_SESSION_KEY, JSON.stringify(s));
-}
+export { API_BASE };
 
-export function clearGameSession(): void {
-  sessionStorage.removeItem(GAME_SESSION_KEY);
-}
-
-export function loadManageSession(): ManageSession | null {
-  try {
-    const raw = sessionStorage.getItem(MANAGE_SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-export function saveManageSession(s: ManageSession): void {
-  sessionStorage.setItem(MANAGE_SESSION_KEY, JSON.stringify(s));
-}
-
-export function clearManageSession(): void {
-  sessionStorage.removeItem(MANAGE_SESSION_KEY);
-}
-
-// — game endpoints —
+// ── Game endpoints ────────────────────────────────────────────────────
 
 export async function fetchGameState(s: GameSession): Promise<unknown> {
-  const url = `${apiBase()}/api/game/state?channel=${encodeURIComponent(s.channelId)}&session=${encodeURIComponent(s.sessionId)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${s.token}` },
-  });
-  if (!res.ok) {
-    if (res.status === 404) return { gone: true };
-    throw new Error(`game state fetch failed: ${res.status}`);
+  try {
+    return await pluginApi().request(
+      "GET",
+      `/api/game/state?channel=${encodeURIComponent(s.channelId)}&session=${encodeURIComponent(s.sessionId)}`,
+    );
+  } catch (err) {
+    // Treat 404 as "this game has ended" rather than a hard error —
+    // the board renders a "game gone" state. PluginApi rejects with
+    // an Error containing the message body, so sniff the message.
+    if (err instanceof Error && /404|not.found/i.test(err.message)) {
+      return { gone: true };
+    }
+    throw err;
   }
-  return res.json();
 }
 
-export async function postGameAction(
+export function postGameAction(
   s: GameSession,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  const url = `${apiBase()}/api/game/action`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${s.token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ channel: s.channelId, session: s.sessionId, ...body }),
+  return pluginApi().request("POST", "/api/game/action", {
+    channel: s.channelId,
+    session: s.sessionId,
+    ...body,
   });
-  return res.json();
 }
 
 export async function mintSseTicket(s: GameSession): Promise<string> {
-  const url = `${apiBase()}/api/game/sse-ticket`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${s.token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ channel: s.channelId, session: s.sessionId }),
-  });
-  if (!res.ok) throw new Error(`sse-ticket failed: ${res.status}`);
-  const body = (await res.json()) as { ticket: string };
+  const body = await pluginApi().request<{ ticket: string }>(
+    "POST",
+    "/api/game/sse-ticket",
+    { channel: s.channelId, session: s.sessionId },
+  );
   return body.ticket;
 }
 
 export function gameSseUrl(s: GameSession, ticket: string): string {
-  return `${apiBase()}/api/game/events?channel=${encodeURIComponent(s.channelId)}&session=${encodeURIComponent(s.sessionId)}&ticket=${encodeURIComponent(ticket)}`;
+  return (
+    `${API_BASE}/api/game/events` +
+    `?channel=${encodeURIComponent(s.channelId)}` +
+    `&session=${encodeURIComponent(s.sessionId)}` +
+    `&ticket=${encodeURIComponent(ticket)}`
+  );
 }
 
-// — manage endpoints —
+// ── Manage endpoints ──────────────────────────────────────────────────
 
-export async function exchangeManageToken(
-  botJwt: string,
-): Promise<ManageSession> {
-  const url = `${apiBase()}/api/manage/exchange`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${botJwt}` },
-  });
-  if (!res.ok) throw new Error(`manage exchange failed: ${res.status}`);
-  return res.json();
-}
-
-export async function refreshManageToken(refreshToken: string): Promise<ManageSession> {
-  const url = `${apiBase()}/api/manage/refresh`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-  });
-  if (!res.ok) throw new Error(`manage refresh failed: ${res.status}`);
-  return res.json();
-}
-
-export async function manageListGames(s: ManageSession): Promise<unknown[]> {
-  const url = `${apiBase()}/api/manage/games`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${s.accessToken}` },
-  });
-  if (!res.ok) throw new Error(`manage list failed: ${res.status}`);
-  const body = (await res.json()) as { games: unknown[] };
+export async function manageListGames(): Promise<unknown[]> {
+  const body = await pluginApi().request<{ games: unknown[] }>(
+    "GET",
+    "/api/manage/games",
+  );
   return body.games;
 }
 
-export async function manageStopGame(s: ManageSession, channelId: string): Promise<void> {
-  const url = `${apiBase()}/api/manage/games/${encodeURIComponent(channelId)}/stop`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${s.accessToken}` },
-  });
-  if (!res.ok) throw new Error(`manage stop failed: ${res.status}`);
+export function manageStopGame(channelId: string): Promise<void> {
+  return pluginApi().request<void>(
+    "POST",
+    `/api/manage/games/${encodeURIComponent(channelId)}/stop`,
+  );
 }
 
-// — URL parsing —
-
-export function readUrlParams(): {
-  token: string | null;
-  c: string | null;
-  s: string | null;
-  mode: string | null;
-} {
-  const url = new URL(location.href);
-  const out = {
-    token: url.searchParams.get("token"),
-    c: url.searchParams.get("c"),
-    s: url.searchParams.get("s"),
-    mode: url.searchParams.get("mode"),
-  };
-  // Strip from URL to avoid leaking in screenshots.
-  if (out.token || out.c || out.s || out.mode) {
-    url.searchParams.delete("token");
-    url.searchParams.delete("c");
-    url.searchParams.delete("s");
-    url.searchParams.delete("mode");
-    history.replaceState({}, "", url.toString());
-  }
-  return out;
-}
-
-export function decodeJwtPayload(token: string): unknown {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  try {
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
-    return JSON.parse(atob(b64 + pad));
-  } catch {
-    return null;
+declare global {
+  interface Window {
+    __PLUGIN_BASE__?: string;
   }
 }
