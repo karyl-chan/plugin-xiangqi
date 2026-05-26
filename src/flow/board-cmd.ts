@@ -18,13 +18,10 @@ export async function handleBoard(ctx: CommandContext): Promise<CommandReply> {
       game.status === "active"
         ? t(undefined, "board.turnNote", { sideZh: sideZh(game.board.sideToMove) })
         : t(undefined, "board.gameOver"),
+      "```",
+      renderBoardText(game.board),
+      "```",
     ].join("\n"),
-    fields: [
-      {
-        name: "棋盤",
-        value: "```\n" + renderBoardText(game.board) + "\n```",
-      },
-    ],
   };
   return { embeds: [embed], ephemeral: true };
 }

@@ -234,13 +234,12 @@ async function echoRichMove(
         ? EMBED_COLOR_DRAW
         : EMBED_COLOR_WIN
       : EMBED_COLOR,
-    description: lines.join("\n"),
-    fields: [
-      {
-        name: "棋盤",
-        value: "```\n" + renderBoardText(state.board) + "\n```",
-      },
-    ],
+    description: [
+      ...lines,
+      "```",
+      renderBoardText(state.board),
+      "```",
+    ].join("\n"),
   };
 
   const sent = await sendMessage({
@@ -274,13 +273,13 @@ async function postEndBanner(
         {
           title: t(undefined, "board.gameOver"),
           color: winner == null ? EMBED_COLOR_DRAW : EMBED_COLOR_WIN,
-          description: `${headline}\n${reason}`,
-          fields: [
-            {
-              name: "棋盤",
-              value: "```\n" + renderBoardText(state.board) + "\n```",
-            },
-          ],
+          description: [
+            headline,
+            reason,
+            "```",
+            renderBoardText(state.board),
+            "```",
+          ].join("\n"),
         },
       ],
     });

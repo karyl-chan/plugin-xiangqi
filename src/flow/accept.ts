@@ -46,13 +46,10 @@ export async function startActiveGame(state: GameState): Promise<void> {
           description: [
             `${state.red.displayName} (紅) vs ${state.black.displayName} (黑)`,
             t(undefined, "board.turnNote", { sideZh: sideZh(state.board.sideToMove) }),
+            "```",
+            renderBoardText(state.board),
+            "```",
           ].join("\n"),
-          fields: [
-            {
-              name: "棋盤",
-              value: "```\n" + renderBoardText(state.board) + "\n```",
-            },
-          ],
         },
       ],
     });
