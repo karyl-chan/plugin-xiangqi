@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { bootstrapPluginSession } from "@karyl-chan/plugin-sdk/web";
+import { bootstrapPluginSession, decodeJwt } from "@karyl-chan/plugin-sdk/web";
 import { setApi, type GameSession } from "./api";
 import GameBoardView from "./views/GameBoardView.vue";
 import ManageView from "./views/ManageView.vue";
@@ -45,17 +45,16 @@ onMounted(async () => {
   try {
     // Xiangqi's link URLs don't carry `?surface=` — the bot CLI emits
     // a `/?token=…&c=…&s=…` link whose manage-vs-game intent is in the
-    // JWT capabilities. Use SDK 0.5's `surfaceFromClaims` resolver to
-    // derive surface from the token; SDK handles decode, manage
-    // exchange, refresh, and sessionStorage restore.
+    // JWT capabilities. Peek at the URL token's caps ourselves to
+    // pick the SDK flow: exchange + refresh pair for manage; direct
+    // bearer for game-board play.
+    const urlToken = new URLSearchParams(window.location.search).get("token");
+    const urlClaims = urlToken ? decodeJwt(urlToken) : null;
+    const wantsExchange = urlClaims ? hasManageCaps(urlClaims) : false;
+
     const handle = await bootstrapPluginSession({
       pluginKey: PLUGIN_KEY,
-      surfaces: {
-        manage: "manage",
-        game: "session",
-      },
-      surfaceFromClaims: (claims) =>
-        hasManageCaps(claims) ? "manage" : "game",
+      exchangeJwt: wantsExchange,
       extraUrlParams: ["c", "s"],
       onAccessDenied: (msg) => {
         deniedMessage.value = msg || "存取遭拒，請重新取得連結。";
@@ -63,15 +62,15 @@ onMounted(async () => {
     });
     setApi(handle.api);
 
-    if (handle.denied || handle.mode === "none") {
+    if (handle.denied || !handle.isAuthenticated) {
       return;
     }
 
     // Tab reload — SDK restored auth from sessionStorage but has no
-    // decoded claims for us. Manage resumes cleanly; game needs the
-    // channel + session ids from the URL (stripped, not stored).
+    // decoded claims for us. Manage resumes cleanly (the pair survived);
+    // game needs `?c=` / `?s=` which were stripped, so re-prompt.
     if (!handle.claims) {
-      if (handle.mode === "manage") {
+      if (handle.hasRefreshPair) {
         mode.value = "manage";
       } else {
         deniedMessage.value =
@@ -80,7 +79,7 @@ onMounted(async () => {
       return;
     }
 
-    if (handle.surface === "manage") {
+    if (wantsExchange) {
       mode.value = "manage";
       return;
     }
