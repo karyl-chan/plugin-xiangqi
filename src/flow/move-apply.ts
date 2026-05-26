@@ -16,7 +16,7 @@ import {
   type MoveRecord,
 } from "../game/state.js";
 import { retainEndedGame } from "../game/store.js";
-import { renderBoardText } from "../game/render.js";
+import { BOARD_TOP_RULE, renderBoardText } from "../game/render.js";
 import { sendMessage } from "./discord.js";
 import { notifyGameChanged } from "./sse.js";
 import { cancelAiStep } from "../engine/npc-driver.js";
@@ -236,6 +236,7 @@ async function echoRichMove(
       : EMBED_COLOR,
     description: [
       ...lines,
+      BOARD_TOP_RULE,
       "```",
       renderBoardText(state.board),
       "```",
@@ -276,6 +277,7 @@ async function postEndBanner(
           description: [
             headline,
             reason,
+            BOARD_TOP_RULE,
             "```",
             renderBoardText(state.board),
             "```",

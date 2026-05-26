@@ -1,7 +1,7 @@
 import type { CommandContext, CommandReply } from "@karyl-chan/plugin-sdk";
 import { t, sideZh } from "../i18n/index.js";
 import { getEndedGame, getGame } from "../game/store.js";
-import { renderBoardText } from "../game/render.js";
+import { BOARD_TOP_RULE, renderBoardText } from "../game/render.js";
 import { EMBED_COLOR } from "../constants.js";
 
 export async function handleBoard(ctx: CommandContext): Promise<CommandReply> {
@@ -18,6 +18,7 @@ export async function handleBoard(ctx: CommandContext): Promise<CommandReply> {
       game.status === "active"
         ? t(undefined, "board.turnNote", { sideZh: sideZh(game.board.sideToMove) })
         : t(undefined, "board.gameOver"),
+      BOARD_TOP_RULE,
       "```",
       renderBoardText(game.board),
       "```",

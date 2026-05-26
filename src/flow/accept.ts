@@ -14,7 +14,7 @@ import {
 } from "../game/state.js";
 import { notifyGameChanged } from "./sse.js";
 import { ephemeralFollowup, sendMessage } from "./discord.js";
-import { renderBoardText } from "../game/render.js";
+import { BOARD_TOP_RULE, renderBoardText } from "../game/render.js";
 import { startClockTicker } from "./clock.js";
 import { cancelAiStep, scheduleAiStep } from "../engine/npc-driver.js";
 import { buildWebuiLinkRow } from "./webui-link.js";
@@ -46,6 +46,7 @@ export async function startActiveGame(state: GameState): Promise<void> {
           description: [
             `${state.red.displayName} (紅) vs ${state.black.displayName} (黑)`,
             t(undefined, "board.turnNote", { sideZh: sideZh(state.board.sideToMove) }),
+            BOARD_TOP_RULE,
             "```",
             renderBoardText(state.board),
             "```",

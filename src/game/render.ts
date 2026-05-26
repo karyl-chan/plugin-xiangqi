@@ -6,12 +6,31 @@ const FILES_RED_BOTTOM = "九 八 七 六 五 四 三 二 一";
 // same width as a CJK piece glyph in Discord's monospace font, aligning
 // black's file headers with the cell columns below.
 const FILES_BLACK_TOP = "１ ２ ３ ４ ５ ６ ７ ８ ９";
-// River label must use the SAME 9-cell + 8-space layout as every other
-// row, otherwise Discord's embed-description wraps it as a long line on
-// desktop and the layout fragments visually. "楚河漢界" sits in cols
-// 3-6 with three ━ left of it and two ━ right; the asymmetry is the
-// only way to fit the 4-char label inside 9 cells.
+// River label uses the same 9-cell + 8-space layout as every other row
+// so the columns line up. "楚河漢界" sits in cols 3-6 with three ━ left
+// of it and two ━ right; the asymmetry is the only way to fit a 4-char
+// label inside 9 cells.
 const RIVER_LINE = ["━", "━", "━", "楚", "河", "漢", "界", "━", "━"].join(" ");
+
+/**
+ * Width-forcing rule rendered just above the board's code block. Discord
+ * embed widths are driven by the longest NON-code-block line in the
+ * description; code-block contents don't contribute to that sizing. So
+ * if everything else above the board is shorter than a board row (the
+ * common case when the move-line / banner text is brief), the embed
+ * collapses narrow and the code block has to soft-wrap board rows on
+ * desktop — the board fragments visually.
+ *
+ * U+FF0D FULLWIDTH HYPHEN-MINUS is guaranteed CJK-wide (East Asian
+ * Width: Fullwidth) so 17 copies of it always render around 17 × 2 ≈ 34
+ * ASCII-width units in Discord's CJK font, which exceeds the 9-cell +
+ * 8-space board row inside the code block on every client we've tested.
+ *
+ * Exported so all four embed-building sites (start, move, board cmd,
+ * end banner) share the same width invariant — divergence is what
+ * caused the original wrap.
+ */
+export const BOARD_TOP_RULE = "－".repeat(17);
 
 /**
  * Discord-friendly board render. Two glyphs wide per square (Chinese
@@ -19,7 +38,9 @@ const RIVER_LINE = ["━", "━", "━", "楚", "河", "漢", "界", "━", "━
  * (black) and bottom (red). The river is rendered with the canonical
  * "楚河漢界" label between rows.
  *
- * Callers wrap the result in a code block.
+ * Callers wrap the result in a code block and should prepend
+ * `BOARD_TOP_RULE` to the description so the embed renders wide enough
+ * for the code-block rows to fit on one line each.
  */
 export function renderBoardText(b: Board): string {
   const lines: string[] = [];
