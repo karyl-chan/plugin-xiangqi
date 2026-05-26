@@ -1,5 +1,6 @@
 import {
   componentCustomId,
+  type APIEmbed,
   type ComponentContext,
   type MessageActionRow,
 } from "@karyl-chan/plugin-sdk";
@@ -15,48 +16,56 @@ import { runtime } from "../runtime.js";
 interface SendArgs {
   channelId: string;
   content?: string;
-  embeds?: unknown[];
-  components?: unknown[];
+  embeds?: APIEmbed[];
+  components?: MessageActionRow[];
   allowedMentions?: { users?: string[]; roles?: string[] };
 }
+
+// All four wrappers preserve their pre-L-2 "null on failure" contract so
+// existing callers (game flow / move-watcher) don't need a try/catch —
+// the typed facade throws BotRpcError, we collapse to null here.
 
 export async function sendMessage(
   args: SendArgs,
 ): Promise<{ id: string; channel_id: string } | null> {
-  const res = (await runtime().botRpc("/api/plugin/messages.send", {
-    channel_id: args.channelId,
-    content: args.content,
-    embeds: args.embeds,
-    components: args.components,
-    allowed_mentions: args.allowedMentions,
-  })) as { id: string; channel_id: string } | null;
-  return res;
+  try {
+    return await runtime().discord.messages.send(args);
+  } catch (err) {
+    runtime().log.warn("xiangqi: messages.send failed", {
+      err: (err as Error).message,
+    });
+    return null;
+  }
 }
 
 export async function editMessage(args: {
   channelId: string;
   messageId: string;
   content?: string;
-  embeds?: unknown[];
-  components?: unknown[];
+  embeds?: APIEmbed[];
+  components?: MessageActionRow[];
 }): Promise<{ id: string; channel_id: string } | null> {
-  return (await runtime().botRpc("/api/plugin/messages.edit", {
-    channel_id: args.channelId,
-    message_id: args.messageId,
-    content: args.content,
-    embeds: args.embeds,
-    components: args.components,
-  })) as { id: string; channel_id: string } | null;
+  try {
+    return await runtime().discord.messages.edit(args);
+  } catch (err) {
+    runtime().log.warn("xiangqi: messages.edit failed", {
+      err: (err as Error).message,
+    });
+    return null;
+  }
 }
 
 export async function deleteMessage(args: {
   channelId: string;
   messageId: string;
 }): Promise<void> {
-  await runtime().botRpc("/api/plugin/messages.delete", {
-    channel_id: args.channelId,
-    message_id: args.messageId,
-  });
+  try {
+    await runtime().discord.messages.delete(args);
+  } catch (err) {
+    runtime().log.warn("xiangqi: messages.delete failed", {
+      err: (err as Error).message,
+    });
+  }
 }
 
 export async function addReaction(args: {
@@ -64,11 +73,13 @@ export async function addReaction(args: {
   messageId: string;
   emoji: string;
 }): Promise<void> {
-  await runtime().botRpc("/api/plugin/messages.add_reaction", {
-    channel_id: args.channelId,
-    message_id: args.messageId,
-    emoji: args.emoji,
-  });
+  try {
+    await runtime().discord.messages.addReaction(args);
+  } catch (err) {
+    runtime().log.warn("xiangqi: messages.add_reaction failed", {
+      err: (err as Error).message,
+    });
+  }
 }
 
 /** Convenience: a single Discord component-v1 "link button" row. */
@@ -115,8 +126,8 @@ export async function ephemeralFollowup(
   ctx: ComponentContext,
   content: string,
 ): Promise<void> {
-  await ctx.botRpc("/api/plugin/interactions.followup", {
-    interaction_token: ctx.interactionToken,
+  await ctx.discord.interactions.followup({
+    interactionToken: ctx.interactionToken,
     content,
     ephemeral: true,
   });

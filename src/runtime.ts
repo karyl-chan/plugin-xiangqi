@@ -6,10 +6,14 @@
  * the rest of the code reads them through runtime().
  */
 
-import type { Logger } from "@karyl-chan/plugin-sdk";
+import type { Discord, Logger, Voice } from "@karyl-chan/plugin-sdk";
 
 export interface XiangqiRuntime {
   botRpc: (path: string, body?: unknown) => Promise<unknown | null>;
+  /** Typed Discord RPC facade — Lockdown L-2. Preferred over botRpc. */
+  discord: Discord;
+  /** Typed Voice RPC facade. */
+  voice: Voice;
   log: Logger;
   publicBaseUrl: () => string | undefined;
   /** Ed25519 SPKI PEM that signs plugin-session JWTs. */

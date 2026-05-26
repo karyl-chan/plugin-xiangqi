@@ -6,6 +6,8 @@ const started = await buildPlugin().start();
 
 wireRuntime({
   botRpc: started.botRpc,
+  discord: started.discord,
+  voice: started.voice,
   log: {
     info: (msg, meta) => started.server.log.info(meta ?? {}, msg),
     warn: (msg, meta) => started.server.log.warn(meta ?? {}, msg),
