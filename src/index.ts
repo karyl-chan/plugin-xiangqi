@@ -12,7 +12,6 @@ wireRuntime({
     error: (msg, meta) => started.server.log.error(meta ?? {}, msg),
   },
   publicBaseUrl: () => started.getPublicBaseUrl(),
-  dispatchHmacKey: () => started.getDispatchHmacKey(),
   sessionVerifyKey: () => started.getSessionVerifyPublicKey(),
 });
 

@@ -1,3 +1,4 @@
+import type { MessageActionRow } from "@karyl-chan/plugin-sdk";
 import { runtime } from "../runtime.js";
 import { t } from "../i18n/index.js";
 import { linkButtonRow } from "./discord.js";
@@ -15,7 +16,7 @@ export async function buildWebuiLinkRow(opts: {
   guildId: string;
   channelId: string;
   sessionId: string;
-}): Promise<unknown | null> {
+}): Promise<MessageActionRow | null> {
   const res = (await runtime().botRpc("/api/plugin/auth.session", {
     user_id: opts.userId,
     kind: "session",

@@ -1,6 +1,7 @@
 import {
   componentCustomId,
   type ComponentContext,
+  type MessageActionRow,
 } from "@karyl-chan/plugin-sdk";
 import { PLUGIN_KEY } from "../constants.js";
 import { runtime } from "../runtime.js";
@@ -71,8 +72,11 @@ export async function addReaction(args: {
 }
 
 /** Convenience: a single Discord component-v1 "link button" row. */
-export function linkButtonRow(label: string, url: string): unknown {
-  return { type: 1, components: [{ type: 2, style: 5, label, url }] };
+export function linkButtonRow(label: string, url: string): MessageActionRow {
+  return {
+    type: 1,
+    components: [{ type: 2, style: 5, label, url }],
+  } as MessageActionRow;
 }
 
 /** Standard button styles per Discord component-v1 spec. */
@@ -80,7 +84,7 @@ export type ButtonStyle = 1 | 2 | 3 | 4;
 
 export function buttonRow(
   buttons: Array<{ label: string; customId: string; style?: ButtonStyle; emoji?: string; disabled?: boolean }>,
-): unknown {
+): MessageActionRow {
   return {
     type: 1,
     components: buttons.map((b) => ({
@@ -91,7 +95,7 @@ export function buttonRow(
       ...(b.emoji ? { emoji: { name: b.emoji } } : {}),
       ...(b.disabled ? { disabled: true } : {}),
     })),
-  };
+  } as MessageActionRow;
 }
 
 export function buildCustomId(componentId: string, tail?: string): string {

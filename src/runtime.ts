@@ -12,8 +12,6 @@ export interface XiangqiRuntime {
   botRpc: (path: string, body?: unknown) => Promise<unknown | null>;
   log: Logger;
   publicBaseUrl: () => string | undefined;
-  /** Dispatch HMAC key for verifying inbound bot events on /events. */
-  dispatchHmacKey: () => string | null;
   /** Ed25519 SPKI PEM that signs plugin-session JWTs. */
   sessionVerifyKey: () => string | null;
 }

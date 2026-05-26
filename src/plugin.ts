@@ -28,7 +28,7 @@ import { handlePgn } from "./flow/pgn-cmd.js";
 import { handleManage } from "./flow/manage-cmd.js";
 import { onComponent } from "./flow/dispatcher.js";
 import { registerWebRoutes, setPublicUrlEnvFallback } from "./web-routes.js";
-import { registerEventRoute } from "./events.js";
+import { onGuildMessageCreate } from "./flow/move-watcher.js";
 
 // Propagate env fallback into web-routes.ts at module init time so
 // effectiveBase() can use it before any SDK wiring happens. Matches the
@@ -44,10 +44,9 @@ setPublicUrlEnvFallback(PUBLIC_URL_ENV);
  *
  *  • `/xiangqi` is registered only on guilds where an admin enabled the
  *    `xiangqi` guild feature (matches quest-game / radio plugins).
- *  • The feature also subscribes to `guild.message_create` so the
- *    plugin can parse moves typed into the channel — the SDK doesn't
- *    auto-deliver this; we mount our own `/events` HMAC-verified route
- *    in onReady.
+ *  • The feature subscribes to `guild.message_create` so the plugin can
+ *    parse moves typed into the channel — delivery is via the SDK's
+ *    built-in `eventHandlers` (Lockdown L-1); no custom /events route.
  *  • Components stay plugin-level (track 2) so a game in progress stays
  *    interactive even if an admin disables the feature mid-game.
  */
@@ -222,9 +221,18 @@ export function buildPlugin() {
         description: "Access the Karyl Xiangqi admin WebUI (list / force-stop games).",
       }),
     ],
+    eventHandlers: {
+      // SDK verifies HMAC + parses JSON; we narrow + forward to the
+      // move-watcher. Throws inside the handler are caught and logged
+      // by the SDK so a bad payload can't take the plugin process down.
+      "guild.message_create": async (_ctx, data) => {
+        const payload = data as Parameters<typeof onGuildMessageCreate>[0];
+        if (!payload || typeof payload.channel_id !== "string") return;
+        await onGuildMessageCreate(payload);
+      },
+    },
     onReady: async (server) => {
       await registerWebRoutes(server);
-      registerEventRoute(server);
     },
   });
 }
