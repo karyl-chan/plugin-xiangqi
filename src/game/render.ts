@@ -6,11 +6,6 @@ const FILES_RED_BOTTOM = "九 八 七 六 五 四 三 二 一";
 // same width as a CJK piece glyph in Discord's monospace font, aligning
 // black's file headers with the cell columns below.
 const FILES_BLACK_TOP = "１ ２ ３ ４ ５ ６ ７ ８ ９";
-// River label uses the same 9-cell + 8-space layout as every other row
-// so the columns line up. "楚河漢界" sits in cols 3-6 with three ━ left
-// of it and two ━ right; the asymmetry is the only way to fit a 4-char
-// label inside 9 cells.
-const RIVER_LINE = ["━", "━", "━", "楚", "河", "漢", "界", "━", "━"].join(" ");
 
 /**
  * Width-forcing rule rendered just above the board's code block. Discord
@@ -53,7 +48,7 @@ export function renderBoardText(b: Board): string {
       cells.push(piece ? CN_NAME[piece.side][piece.kind] : "．");
     }
     lines.push(cells.join(" "));
-    if (i === 4) lines.push(RIVER_LINE);
+    if (i === 4) lines.push(" ━ ━ ━ 楚 河 漢 界 ━ ━ ━");
   }
   lines.push(FILES_RED_BOTTOM);
   return lines.join("\n");
