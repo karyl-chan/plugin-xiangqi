@@ -4,7 +4,7 @@ import type {
   ComponentContext,
   ComponentReply,
 } from "@karyl-chan/plugin-sdk";
-import { t, sideZh } from "../i18n/index.js";
+import { t, sideLabel, resolveLocale } from "../i18n/index.js";
 import { getGame, withChannelLock } from "../game/store.js";
 import { sideOf, positionKey, type GameState } from "../game/state.js";
 import { initialBoard } from "../xiangqi/board.js";
@@ -74,7 +74,7 @@ export async function applyOfferTakebackBySide(
     notifyGameChanged(game.channelId);
     await sendMessage({
       channelId: game.channelId,
-      content: t(undefined, "takeback.appliedAi", { plies }),
+      content: t(game.locale, "takeback.appliedAi", { plies }),
     });
     return { kind: "applied_ai", plies };
   }
@@ -83,19 +83,19 @@ export async function applyOfferTakebackBySide(
   notifyGameChanged(game.channelId);
   await sendMessage({
     channelId: game.channelId,
-    content: t(undefined, "takeback.offered", {
-      sideZh: sideZh(side),
+    content: t(game.locale, "takeback.offered", {
+      side: sideLabel(game.locale, side),
       plies,
     }),
     components: [
       buttonRow([
         {
-          label: t(undefined, "takeback.acceptBtn"),
+          label: t(game.locale, "takeback.acceptBtn"),
           customId: buildCustomId("tb-acc", game.sessionId),
           style: 3,
         },
         {
-          label: t(undefined, "takeback.declineBtn"),
+          label: t(game.locale, "takeback.declineBtn"),
           customId: buildCustomId("tb-dec", game.sessionId),
           style: 4,
         },
@@ -119,25 +119,28 @@ export function applyDeclineTakebackBySide(game: GameState): void {
 }
 
 export async function handleTakeback(ctx: CommandContext): Promise<CommandReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
-  if (!channelId) return t(undefined, "error.notInGuild");
+  if (!channelId) return t(ctxLocale, "error.notInGuild");
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.status !== "active") {
-      return { content: t(undefined, "error.noGame"), ephemeral: true };
+      return { content: t(ctxLocale, "error.noGame"), ephemeral: true };
     }
     const side = sideOf(game, ctx.userId);
-    if (!side) return { content: t(undefined, "error.notPlayer"), ephemeral: true };
+    if (!side) return { content: t(ctxLocale, "error.notPlayer"), ephemeral: true };
     const outcome = await applyOfferTakebackBySide(game, side);
     if (outcome.kind === "no_history") {
-      return { content: t(undefined, "error.noGame"), ephemeral: true };
+      return { content: t(ctxLocale, "error.noGame"), ephemeral: true };
     }
     if (outcome.kind === "applied_ai") {
-      return { content: t(undefined, "takeback.appliedAi", { plies: outcome.plies }) };
+      return {
+        content: t(ctxLocale, "takeback.appliedAi", { plies: outcome.plies }),
+      };
     }
     return {
-      content: t(undefined, "takeback.offered", {
-        sideZh: sideZh(side),
+      content: t(ctxLocale, "takeback.offered", {
+        side: sideLabel(ctxLocale, side),
         plies: outcome.plies,
       }),
       ephemeral: true,
@@ -149,24 +152,28 @@ export async function handleTakebackAcceptButton(
   ctx: ComponentContext,
   sessionId: string,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.sessionId !== sessionId || !game.takebackOffer) {
-      await ephemeralFollowup(ctx, t(undefined, "error.noGame"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noGame"));
       return;
     }
     const side = sideOf(game, ctx.userId);
     if (!side || side === game.takebackOffer.from) {
-      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
     const { plies } = applyAcceptTakebackBySide(game);
-    return { content: t(undefined, "takeback.applied", { plies }), components: [] };
+    return {
+      content: t(game.locale, "takeback.applied", { plies }),
+      components: [],
+    };
   });
 }
 
@@ -174,24 +181,24 @@ export async function handleTakebackDeclineButton(
   ctx: ComponentContext,
   sessionId: string,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.sessionId !== sessionId || !game.takebackOffer) {
-      await ephemeralFollowup(ctx, t(undefined, "error.noGame"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noGame"));
       return;
     }
     const side = sideOf(game, ctx.userId);
     if (!side || side === game.takebackOffer.from) {
-      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
     applyDeclineTakebackBySide(game);
-    return { content: t(undefined, "takeback.declined"), components: [] };
+    return { content: t(game.locale, "takeback.declined"), components: [] };
   });
 }
-

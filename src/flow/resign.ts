@@ -1,5 +1,5 @@
 import type { CommandContext, CommandReply } from "@karyl-chan/plugin-sdk";
-import { t, sideZh } from "../i18n/index.js";
+import { t, sideLabel, resolveLocale } from "../i18n/index.js";
 import {
   getGame,
   retainEndedGame,
@@ -36,12 +36,12 @@ export async function applyResignBySide(
     channelId: game.channelId,
     embeds: [
       {
-        title: t(undefined, "board.gameOver"),
+        title: t(game.locale, "board.gameOver"),
         description: [
-          t(undefined, "end.resign", { sideZh: sideZh(side) }),
+          t(game.locale, "end.resign", { side: sideLabel(game.locale, side) }),
           winnerSide === "red"
-            ? t(undefined, "end.winnerRed")
-            : t(undefined, "end.winnerBlack"),
+            ? t(game.locale, "end.winnerRed")
+            : t(game.locale, "end.winnerBlack"),
         ].join("\n"),
       },
     ],
@@ -49,18 +49,23 @@ export async function applyResignBySide(
 }
 
 export async function handleResign(ctx: CommandContext): Promise<CommandReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
-  if (!channelId) return t(undefined, "error.notInGuild");
+  if (!channelId) return t(ctxLocale, "error.notInGuild");
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.status !== "active") {
-      return { content: t(undefined, "error.noGame"), ephemeral: true };
+      return { content: t(ctxLocale, "error.noGame"), ephemeral: true };
     }
     const side = sideOf(game, ctx.userId);
     if (!side) {
-      return { content: t(undefined, "error.notPlayer"), ephemeral: true };
+      return { content: t(ctxLocale, "error.notPlayer"), ephemeral: true };
     }
     await applyResignBySide(game, side);
-    return { content: t(undefined, "end.resign", { sideZh: sideZh(side) }) };
+    return {
+      content: t(ctxLocale, "end.resign", {
+        side: sideLabel(ctxLocale, side),
+      }),
+    };
   });
 }

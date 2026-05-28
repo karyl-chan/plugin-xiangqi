@@ -1,6 +1,6 @@
 import type { ComponentContext, ComponentReply } from "@karyl-chan/plugin-sdk";
 import { EMBED_COLOR } from "../constants.js";
-import { t, sideZh } from "../i18n/index.js";
+import { t, sideLabel, resolveLocale } from "../i18n/index.js";
 import {
   getGame,
   removeGame,
@@ -41,11 +41,16 @@ export async function startActiveGame(state: GameState): Promise<void> {
       channelId: state.channelId,
       embeds: [
         {
-          title: t(undefined, "board.title", { shortId: state.sessionId.slice(0, 6) }),
+          title: t(state.locale, "board.title", { shortId: state.sessionId.slice(0, 6) }),
           color: EMBED_COLOR,
           description: [
-            `${state.red.displayName} (紅) vs ${state.black.displayName} (黑)`,
-            t(undefined, "board.turnNote", { sideZh: sideZh(state.board.sideToMove) }),
+            t(state.locale, "board.vsLine", {
+              red: state.red.displayName,
+              black: state.black.displayName,
+            }),
+            t(state.locale, "board.turnNote", {
+              side: sideLabel(state.locale, state.board.sideToMove),
+            }),
             BOARD_TOP_RULE,
             "```",
             renderBoardText(state.board),
@@ -58,7 +63,11 @@ export async function startActiveGame(state: GameState): Promise<void> {
     // Blind-mode: just a one-liner so the channel knows the game opened.
     sent = await sendMessage({
       channelId: state.channelId,
-      content: `🟢 ${state.red.displayName} (紅) vs ${state.black.displayName} (黑) — ${sideZh(state.board.sideToMove)}先行`,
+      content: t(state.locale, "board.openLine", {
+        red: state.red.displayName,
+        black: state.black.displayName,
+        side: sideLabel(state.locale, state.board.sideToMove),
+      }),
     });
   }
   if (sent) state.lastBoardMessageId = sent.id;
@@ -85,26 +94,27 @@ export async function handleAcceptButton(
   ctx: ComponentContext,
   sessionId: string,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
 
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.sessionId !== sessionId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cancelled"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cancelled"));
       return;
     }
     if (game.status !== "pending_accept") {
-      await ephemeralFollowup(ctx, t(undefined, "error.pendingNotMatch"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.pendingNotMatch"));
       return;
     }
     if (ctx.userId !== inviteeIdOf(game)) {
       // Anyone other than the named invitee gets an ephemeral "no perm";
       // the invite stays intact for the real opponent.
-      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
     await startActiveGame(game);
@@ -113,9 +123,16 @@ export async function handleAcceptButton(
       guildId: game.guildId,
       channelId,
       sessionId: game.sessionId,
+      locale: ctxLocale,
     });
     return {
-      content: `${ctx.userDisplayName ?? ctx.userId} 接受挑戰，對局開始！`,
+      content: t(game.locale, "invite.joined", {
+        opponent: ctx.userDisplayName ?? ctx.userId,
+        side: sideLabel(
+          game.locale,
+          game.red.userId === ctx.userId ? "red" : "black",
+        ),
+      }),
       components: linkRow ? [linkRow] : [],
     };
   });
@@ -125,30 +142,31 @@ export async function handleDeclineButton(
   ctx: ComponentContext,
   sessionId: string,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.sessionId !== sessionId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cancelled"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cancelled"));
       return;
     }
     if (game.status !== "pending_accept") {
-      await ephemeralFollowup(ctx, t(undefined, "error.pendingNotMatch"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.pendingNotMatch"));
       return;
     }
     if (ctx.userId !== inviteeIdOf(game)) {
-      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
     removeGame(channelId);
     cancelAiStep(game.sessionId);
     notifyGameChanged(channelId);
     return {
-      content: t(undefined, "invite.declined", {
+      content: t(game.locale, "invite.declined", {
         opponent: ctx.userDisplayName ?? ctx.userId,
       }),
       components: [],
@@ -161,29 +179,30 @@ export async function handleCancelDirectButton(
   ctx: ComponentContext,
   sessionId: string,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
   return withChannelLock(channelId, async () => {
     const game = getGame(channelId);
     if (!game || game.sessionId !== sessionId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cancelled"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cancelled"));
       return;
     }
     if (game.status !== "pending_accept") {
-      await ephemeralFollowup(ctx, t(undefined, "error.pendingNotMatch"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.pendingNotMatch"));
       return;
     }
     if (ctx.userId !== game.challengerUserId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cantCancelOther"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cantCancelOther"));
       return;
     }
     removeGame(channelId);
     cancelAiStep(game.sessionId);
     notifyGameChanged(channelId);
-    return { content: t(undefined, "invite.cancelled"), components: [] };
+    return { content: t(game.locale, "invite.cancelled"), components: [] };
   });
 }
 
@@ -194,29 +213,30 @@ async function joinPublic(
   inviteId: string,
   joinerSide: Side,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
   return withChannelLock(channelId, async () => {
     const invite = getOpenInvite(channelId);
     if (!invite || invite.inviteId !== inviteId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cancelled"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cancelled"));
       return;
     }
     if (ctx.userId === invite.challengerUserId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cantJoinOwn"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cantJoinOwn"));
       return;
     }
     if (invite.challengerSide && joinerSide === invite.challengerSide) {
       // Challenger pinned this side; this button shouldn't exist, but
       // be defensive in case Discord shows a stale message.
-      await ephemeralFollowup(ctx, t(undefined, "error.noPermission"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
     if (getGame(channelId)) {
-      await ephemeralFollowup(ctx, t(undefined, "error.alreadyRunning"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "error.alreadyRunning"));
       return;
     }
     return promoteInviteToGame(ctx, invite, joinerSide);
@@ -228,6 +248,7 @@ async function promoteInviteToGame(
   invite: OpenInvite,
   joinerSide: Side,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const challenger: PlayerRef = {
     userId: invite.challengerUserId,
     displayName: invite.challengerDisplayName,
@@ -247,6 +268,7 @@ async function promoteInviteToGame(
     challengerPlaysSide,
     clock: invite.clock,
     showBoard: invite.showBoard,
+    locale: invite.locale,
   });
   setGame(invite.channelId, game);
   removeOpenInvite(invite.channelId);
@@ -257,11 +279,12 @@ async function promoteInviteToGame(
     guildId: invite.guildId,
     channelId: invite.channelId,
     sessionId: game.sessionId,
+    locale: ctxLocale,
   });
   return {
-    content: t(undefined, "invite.joined", {
+    content: t(game.locale, "invite.joined", {
       opponent: joiner.displayName,
-      sideZh: sideZh(joinerSide),
+      side: sideLabel(game.locale, joinerSide),
     }),
     components: linkRow ? [linkRow] : [],
   };
@@ -285,22 +308,23 @@ export async function handleCancelOpenButton(
   ctx: ComponentContext,
   inviteId: string,
 ): Promise<ComponentReply> {
+  const ctxLocale = resolveLocale(ctx);
   const channelId = ctx.channelId;
   if (!channelId) {
-    await ephemeralFollowup(ctx, t(undefined, "error.notInGuild"));
+    await ephemeralFollowup(ctx, t(ctxLocale, "error.notInGuild"));
     return;
   }
   return withChannelLock(channelId, async () => {
     const invite = getOpenInvite(channelId);
     if (!invite || invite.inviteId !== inviteId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cancelled"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cancelled"));
       return;
     }
     if (ctx.userId !== invite.challengerUserId) {
-      await ephemeralFollowup(ctx, t(undefined, "invite.cantCancelOther"));
+      await ephemeralFollowup(ctx, t(ctxLocale, "invite.cantCancelOther"));
       return;
     }
     removeOpenInvite(channelId);
-    return { content: t(undefined, "invite.cancelled"), components: [] };
+    return { content: t(invite.locale, "invite.cancelled"), components: [] };
   });
 }

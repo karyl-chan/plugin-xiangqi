@@ -1,6 +1,6 @@
 import type { CommandContext, CommandReply } from "@karyl-chan/plugin-sdk";
 import { EMBED_COLOR } from "../constants.js";
-import { t, sideZh } from "../i18n/index.js";
+import { t, sideLabel, resolveLocale, type Locale } from "../i18n/index.js";
 import {
   buildPendingGame,
   type AiLevel,
@@ -42,13 +42,14 @@ const AI_LEVELS: AiLevel[] = ["easy", "normal", "hard"];
  * board also carries a [取消] button only the challenger can click.
  */
 export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
+  const locale = resolveLocale(ctx);
   const guildId = ctx.guildId;
   const channelId = ctx.channelId;
-  if (!guildId || !channelId) return t(undefined, "error.notInGuild");
+  if (!guildId || !channelId) return t(locale, "error.notInGuild");
 
   // Reject if anything is already in flight in this channel.
-  if (getGame(channelId)) return t(undefined, "error.alreadyRunning");
-  if (getOpenInvite(channelId)) return t(undefined, "error.alreadyRunning");
+  if (getGame(channelId)) return t(locale, "error.alreadyRunning");
+  if (getOpenInvite(channelId)) return t(locale, "error.alreadyRunning");
 
   const opponentRaw = ctx.options.opponent as
     | { id: string; username?: string; global_name?: string | null; bot?: boolean }
@@ -62,7 +63,7 @@ export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
   let challengerSide: Side | null = null;
   if (sideOpt) {
     if (sideOpt !== "red" && sideOpt !== "black") {
-      return { content: t(undefined, "error.invalidSide"), ephemeral: true };
+      return { content: t(locale, "error.invalidSide"), ephemeral: true };
     }
     challengerSide = sideOpt;
   }
@@ -71,7 +72,7 @@ export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
   if (clockOpt && clockOpt.trim().length > 0) {
     const parsed = parseClockOption(clockOpt);
     if (!parsed) {
-      return { content: t(undefined, "error.invalidClock"), ephemeral: true };
+      return { content: t(locale, "error.invalidClock"), ephemeral: true };
     }
     clockSpec = parsed;
   }
@@ -87,7 +88,7 @@ export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
   // — AI mode
   if (aiOpt) {
     if (!AI_LEVELS.includes(aiOpt as AiLevel)) {
-      return { content: t(undefined, "error.invalidAiLevel"), ephemeral: true };
+      return { content: t(locale, "error.invalidAiLevel"), ephemeral: true };
     }
     return startAiGame(ctx, {
       guildId,
@@ -97,15 +98,16 @@ export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
       aiLevel: aiOpt as AiLevel,
       clockSpec,
       showBoard,
+      locale,
     });
   }
 
   // — direct invite (named opponent)
   if (opponentRaw) {
     if (opponentRaw.bot)
-      return { content: t(undefined, "error.cantChallengeBot"), ephemeral: true };
+      return { content: t(locale, "error.cantChallengeBot"), ephemeral: true };
     if (opponentRaw.id === ctx.userId)
-      return { content: t(undefined, "error.cantChallengeSelf"), ephemeral: true };
+      return { content: t(locale, "error.cantChallengeSelf"), ephemeral: true };
     return startDirectInvite(ctx, {
       guildId,
       channelId,
@@ -119,6 +121,7 @@ export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
       },
       clockSpec,
       showBoard,
+      locale,
     });
   }
 
@@ -130,6 +133,7 @@ export async function handleStart(ctx: CommandContext): Promise<CommandReply> {
     challengerSide,
     clockSpec,
     showBoard,
+    locale,
   });
 }
 
@@ -143,12 +147,14 @@ interface DirectInviteOpts {
   invitee: PlayerRef;
   clockSpec: { baseSec: number; incSec: number } | null;
   showBoard: boolean;
+  locale: Locale;
 }
 
 async function startDirectInvite(
   _ctx: CommandContext,
   opts: DirectInviteOpts,
 ): Promise<CommandReply> {
+  const { locale } = opts;
   const game = buildPendingGame({
     channelId: opts.channelId,
     guildId: opts.guildId,
@@ -157,42 +163,43 @@ async function startDirectInvite(
     challengerPlaysSide: opts.challengerSide,
     clock: opts.clockSpec,
     showBoard: opts.showBoard,
+    locale,
   });
   setGame(opts.channelId, game);
 
   const inviteEmbed = {
-    title: t(undefined, "invite.title", {
+    title: t(locale, "invite.title", {
       challenger: opts.challenger.displayName,
       opponent: opts.invitee.displayName,
     }),
     description:
       (opts.challengerSide === "red"
-        ? t(undefined, "invite.descriptionRed", {
+        ? t(locale, "invite.descriptionRed", {
             challenger: opts.challenger.displayName,
             opponent: opts.invitee.displayName,
           })
-        : t(undefined, "invite.descriptionBlack", {
+        : t(locale, "invite.descriptionBlack", {
             challenger: opts.challenger.displayName,
             opponent: opts.invitee.displayName,
           })) +
       "\n" +
-      t(undefined, "invite.timeoutNote"),
+      t(locale, "invite.timeoutNote"),
     color: EMBED_COLOR,
   };
   const components = [
     buttonRow([
       {
-        label: t(undefined, "invite.acceptBtn"),
+        label: t(locale, "invite.acceptBtn"),
         customId: buildCustomId("acc", game.sessionId),
         style: 3,
       },
       {
-        label: t(undefined, "invite.declineBtn"),
+        label: t(locale, "invite.declineBtn"),
         customId: buildCustomId("dec", game.sessionId),
         style: 4,
       },
       {
-        label: t(undefined, "invite.cancelBtn"),
+        label: t(locale, "invite.cancelBtn"),
         customId: buildCustomId("cancel", game.sessionId),
         style: 2,
       },
@@ -209,7 +216,9 @@ async function startDirectInvite(
   });
   if (sent) game.inviteMessageId = sent.id;
   return {
-    content: `已對 ${opts.invitee.displayName} 發出邀請。`,
+    content: t(locale, "invite.sentDirect", {
+      opponent: opts.invitee.displayName,
+    }),
     ephemeral: true,
   };
 }
@@ -223,12 +232,14 @@ interface PublicInviteOpts {
   challengerSide: Side | null;  // null → opponent picks
   clockSpec: { baseSec: number; incSec: number } | null;
   showBoard: boolean;
+  locale: Locale;
 }
 
 async function startPublicInvite(
   _ctx: CommandContext,
   opts: PublicInviteOpts,
 ): Promise<CommandReply> {
+  const { locale } = opts;
   const invite: OpenInvite = {
     inviteId: newInviteId(),
     channelId: opts.channelId,
@@ -238,20 +249,21 @@ async function startPublicInvite(
     challengerSide: opts.challengerSide,
     clock: opts.clockSpec,
     showBoard: opts.showBoard,
+    locale,
     createdAt: Date.now(),
   };
   setOpenInvite(invite);
 
   const description = opts.challengerSide
-    ? t(undefined, "invite.publicDescriptionFixedSide", {
+    ? t(locale, "invite.publicDescriptionFixedSide", {
         challenger: opts.challenger.displayName,
-        sideZh: sideZh(opts.challengerSide),
+        side: sideLabel(locale, opts.challengerSide),
       })
-    : t(undefined, "invite.publicDescriptionOpen", {
+    : t(locale, "invite.publicDescriptionOpen", {
         challenger: opts.challenger.displayName,
       });
   const embed = {
-    title: t(undefined, "invite.publicTitle", {
+    title: t(locale, "invite.publicTitle", {
       challenger: opts.challenger.displayName,
     }),
     description,
@@ -265,20 +277,20 @@ async function startPublicInvite(
   const joinBtns: Parameters<typeof buttonRow>[0] = [];
   if (opts.challengerSide !== "red") {
     joinBtns.push({
-      label: t(undefined, "invite.joinRedBtn"),
+      label: t(locale, "invite.joinRedBtn"),
       customId: buildCustomId("join-r", invite.inviteId),
       style: 1,
     });
   }
   if (opts.challengerSide !== "black") {
     joinBtns.push({
-      label: t(undefined, "invite.joinBlackBtn"),
+      label: t(locale, "invite.joinBlackBtn"),
       customId: buildCustomId("join-b", invite.inviteId),
       style: 2,
     });
   }
   joinBtns.push({
-    label: t(undefined, "invite.cancelBtn"),
+    label: t(locale, "invite.cancelBtn"),
     customId: buildCustomId("inv-cancel", invite.inviteId),
     style: 4,
   });
@@ -290,7 +302,7 @@ async function startPublicInvite(
   });
   if (sent) invite.inviteMessageId = sent.id;
   return {
-    content: `已開啟對局邀請，等待對手加入。`,
+    content: t(locale, "invite.publicCreated"),
     ephemeral: true,
   };
 }
@@ -305,14 +317,16 @@ interface AiStartOpts {
   aiLevel: AiLevel;
   clockSpec: { baseSec: number; incSec: number } | null;
   showBoard: boolean;
+  locale: Locale;
 }
 
 async function startAiGame(
   _ctx: CommandContext,
   opts: AiStartOpts,
 ): Promise<CommandReply> {
+  const { locale } = opts;
   return withChannelLock(opts.channelId, async () => {
-    if (getGame(opts.channelId)) return t(undefined, "error.alreadyRunning");
+    if (getGame(opts.channelId)) return t(locale, "error.alreadyRunning");
 
     const ai: PlayerRef = {
       userId: `ai:${opts.aiLevel}`,
@@ -328,14 +342,15 @@ async function startAiGame(
       challengerPlaysSide: opts.challengerSide,
       clock: opts.clockSpec,
       showBoard: opts.showBoard,
+      locale,
     });
     setGame(opts.channelId, game);
     await startActiveGame(game);
     return {
-      content: t(undefined, "invite.aiStarting", {
+      content: t(locale, "invite.aiStarting", {
         challenger: opts.challenger.displayName,
         level: opts.aiLevel,
-        sideZh: sideZh(opts.challengerSide),
+        side: sideLabel(locale, opts.challengerSide),
       }),
       ephemeral: true,
     };

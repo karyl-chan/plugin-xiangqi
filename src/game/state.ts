@@ -6,6 +6,7 @@ import {
   type Square,
 } from "../xiangqi/board.js";
 import type { Side } from "../xiangqi/pieces.js";
+import type { Locale } from "../i18n/index.js";
 
 export type GameStatus =
   | "pending_accept"
@@ -100,6 +101,15 @@ export interface GameState {
    */
   showBoard: boolean;
 
+  /**
+   * Locale used for every channel-facing text the bot writes for this
+   * game (move echoes, end banners, draw / takeback announcements).
+   * Captured from the challenger's interaction at game-creation time so
+   * the channel-side conversation stays in one language even when the
+   * two players have different Discord client locales.
+   */
+  locale: Locale;
+
   /** Discord message id of the pending invite message (pending_accept stage). */
   inviteMessageId?: string;
   /** Discord message id of the last public-board post we made. */
@@ -136,6 +146,7 @@ export function buildPendingGame(opts: {
   challengerPlaysSide: Side;
   clock: { baseSec: number; incSec: number } | null;
   showBoard?: boolean;
+  locale: Locale;
 }): GameState {
   const board = initialBoard();
   const challengerSide = opts.challengerPlaysSide;
@@ -163,6 +174,7 @@ export function buildPendingGame(opts: {
     status: "pending_accept",
     clock,
     showBoard: opts.showBoard ?? false,
+    locale: opts.locale,
     createdAt: Date.now(),
   };
 }

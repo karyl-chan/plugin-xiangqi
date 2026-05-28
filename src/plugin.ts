@@ -5,9 +5,11 @@ import {
   definePluginCommand,
   definePluginComponent,
   type CommandContext,
+  type CommandOption,
   type CommandReply,
   type ComponentContext,
   type ComponentReply,
+  type PluginCommandDefinition,
 } from "@karyl-chan/plugin-sdk";
 import {
   GUILD_FEATURE_KEY,
@@ -15,7 +17,7 @@ import {
   PLUGIN_NAME,
   PLUGIN_VERSION,
 } from "./constants.js";
-import { t } from "./i18n/index.js";
+import { t, localizedDescriptions } from "./i18n/index.js";
 import { handleStart } from "./flow/start.js";
 import { handleStop } from "./flow/stop.js";
 import { handleBoard } from "./flow/board-cmd.js";
@@ -40,6 +42,27 @@ const PUBLIC_URL_ENV = process.env.XIANGQI_PUBLIC_URL
 setPublicUrlEnvFallback(PUBLIC_URL_ENV);
 
 /**
+ * Build a slash command option that carries both the canonical English
+ * `description` and a Discord-shaped `descriptionLocalizations` map so
+ * Discord renders the option's help text in the user's client locale.
+ *
+ * The SDK's `CommandOption` interface doesn't yet declare the field;
+ * it's intersected here so the literal compiles while the (extra) field
+ * still survives the manifest spread + reaches Discord at register time.
+ */
+type LocalizedOption = CommandOption & {
+  descriptionLocalizations?: ReturnType<typeof localizedDescriptions>;
+};
+
+function locOption(opt: CommandOption, key: string): LocalizedOption {
+  return {
+    ...opt,
+    description: t("en", key),
+    descriptionLocalizations: localizedDescriptions(key),
+  };
+}
+
+/**
  * Karyl Xiangqi — Chinese chess as a guild feature.
  *
  *  • `/xiangqi` is registered only on guilds where an admin enabled the
@@ -55,7 +78,7 @@ export function buildPlugin() {
     key: PLUGIN_KEY,
     name: PLUGIN_NAME,
     version: PLUGIN_VERSION,
-    description: t(undefined, "plugin.description"),
+    description: t("en", "plugin.description"),
     author: "0Miles",
     rpcMethodsUsed: [
       "messages.send",
@@ -71,104 +94,156 @@ export function buildPlugin() {
       defineGuildFeature({
         key: GUILD_FEATURE_KEY,
         name: "Karyl Xiangqi",
-        description: t(undefined, "feature.description"),
+        description: t("en", "feature.description"),
         enabledByDefault: false,
         eventsSubscribed: ["guild.message_create"],
         commands: [
-          definePluginCommand({
-            name: "xiangqi",
-            description: t(undefined, "cmd.description"),
-            scope: "guild",
-            integrationTypes: ["guild_install"],
-            contexts: ["Guild"],
-            options: [
-              {
-                type: "sub_command",
-                name: "start",
-                description: t(undefined, "cmd.start.description"),
-                options: [
+          // descriptionLocalizations is an "extra" alongside `description`
+          // — the SDK's manifest builder spreads the command object's
+          // options array through to the manifest, so the field reaches
+          // Discord without an SDK change. The top-level command literal
+          // is widened to `PluginCommandDefinition & { … }` so the extra
+          // field on the command object survives too.
+          ({
+            ...definePluginCommand({
+              name: "xiangqi",
+              description: t("en", "cmd.description"),
+              scope: "guild",
+              integrationTypes: ["guild_install"],
+              contexts: ["Guild"],
+              options: [
+                locOption(
                   {
-                    type: "user",
-                    name: "opponent",
-                    description: t(undefined, "cmd.start.opponentOption"),
-                    required: false,
-                  },
-                  {
-                    type: "string",
-                    name: "ai",
-                    description: t(undefined, "cmd.start.aiLevelOption"),
-                    required: false,
-                    choices: [
-                      { name: "easy", value: "easy" },
-                      { name: "normal", value: "normal" },
-                      { name: "hard", value: "hard" },
+                    type: "sub_command",
+                    name: "start",
+                    description: "",
+                    options: [
+                      locOption(
+                        {
+                          type: "user",
+                          name: "opponent",
+                          description: "",
+                          required: false,
+                        },
+                        "cmd.start.opponentOption",
+                      ),
+                      locOption(
+                        {
+                          type: "string",
+                          name: "ai",
+                          description: "",
+                          required: false,
+                          choices: [
+                            { name: "easy", value: "easy" },
+                            { name: "normal", value: "normal" },
+                            { name: "hard", value: "hard" },
+                          ],
+                        },
+                        "cmd.start.aiLevelOption",
+                      ),
+                      locOption(
+                        {
+                          type: "string",
+                          name: "side",
+                          description: "",
+                          required: false,
+                          choices: [
+                            { name: "red", value: "red" },
+                            { name: "black", value: "black" },
+                          ],
+                        },
+                        "cmd.start.sideOption",
+                      ),
+                      locOption(
+                        {
+                          type: "string",
+                          name: "clock",
+                          description: "",
+                          required: false,
+                        },
+                        "cmd.start.clockOption",
+                      ),
+                      locOption(
+                        {
+                          type: "boolean",
+                          name: "show_board",
+                          description: "",
+                          required: false,
+                        },
+                        "cmd.start.showBoardOption",
+                      ),
                     ],
                   },
-                  {
-                    type: "string",
-                    name: "side",
-                    description: t(undefined, "cmd.start.sideOption"),
-                    required: false,
-                    choices: [
-                      { name: "red", value: "red" },
-                      { name: "black", value: "black" },
-                    ],
-                  },
-                  {
-                    type: "string",
-                    name: "clock",
-                    description: t(undefined, "cmd.start.clockOption"),
-                    required: false,
-                  },
-                  {
-                    type: "boolean",
-                    name: "show_board",
-                    description: t(undefined, "cmd.start.showBoardOption"),
-                    required: false,
-                  },
-                ],
+                  "cmd.start.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "stop", description: "" },
+                  "cmd.stop.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "board", description: "" },
+                  "cmd.board.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "status", description: "" },
+                  "cmd.status.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "webui", description: "" },
+                  "cmd.webui.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "resign", description: "" },
+                  "cmd.resign.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "draw", description: "" },
+                  "cmd.draw.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "takeback", description: "" },
+                  "cmd.takeback.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "pgn", description: "" },
+                  "cmd.pgn.description",
+                ),
+                locOption(
+                  { type: "sub_command", name: "manage", description: "" },
+                  "cmd.manage.description",
+                ),
+              ],
+              handler: async (ctx: CommandContext): Promise<CommandReply> => {
+                const sub = ctx.subCommandName;
+                switch (sub) {
+                  case "start":
+                    return handleStart(ctx);
+                  case "stop":
+                    return handleStop(ctx);
+                  case "board":
+                    return handleBoard(ctx);
+                  case "status":
+                    return handleStatus(ctx);
+                  case "webui":
+                    return handleWebui(ctx);
+                  case "resign":
+                    return handleResign(ctx);
+                  case "draw":
+                    return handleDraw(ctx);
+                  case "takeback":
+                    return handleTakeback(ctx);
+                  case "pgn":
+                    return handlePgn(ctx);
+                  case "manage":
+                    return handleManage(ctx);
+                  default:
+                    return { content: "Unknown subcommand", ephemeral: true };
+                }
               },
-              { type: "sub_command", name: "stop", description: t(undefined, "cmd.stop.description") },
-              { type: "sub_command", name: "board", description: t(undefined, "cmd.board.description") },
-              { type: "sub_command", name: "status", description: t(undefined, "cmd.status.description") },
-              { type: "sub_command", name: "webui", description: t(undefined, "cmd.webui.description") },
-              { type: "sub_command", name: "resign", description: t(undefined, "cmd.resign.description") },
-              { type: "sub_command", name: "draw", description: t(undefined, "cmd.draw.description") },
-              {
-                type: "sub_command",
-                name: "takeback",
-                description: t(undefined, "cmd.takeback.description"),
-              },
-              { type: "sub_command", name: "pgn", description: t(undefined, "cmd.pgn.description") },
-              { type: "sub_command", name: "manage", description: t(undefined, "cmd.manage.description") },
-            ],
-            handler: async (ctx: CommandContext): Promise<CommandReply> => {
-              const sub = ctx.subCommandName;
-              switch (sub) {
-                case "start":
-                  return handleStart(ctx);
-                case "stop":
-                  return handleStop(ctx);
-                case "board":
-                  return handleBoard(ctx);
-                case "status":
-                  return handleStatus(ctx);
-                case "webui":
-                  return handleWebui(ctx);
-                case "resign":
-                  return handleResign(ctx);
-                case "draw":
-                  return handleDraw(ctx);
-                case "takeback":
-                  return handleTakeback(ctx);
-                case "pgn":
-                  return handlePgn(ctx);
-                case "manage":
-                  return handleManage(ctx);
-                default:
-                  return { content: "Unknown subcommand", ephemeral: true };
-              }
-            },
+            }),
+            descriptionLocalizations: localizedDescriptions("cmd.description"),
+          } as PluginCommandDefinition & {
+            descriptionLocalizations: ReturnType<typeof localizedDescriptions>;
           }),
         ],
       }),

@@ -1,140 +1,108 @@
 /**
- * Single-locale dictionary (zh-TW). Same pattern as the quest-game plugin:
- * dotted-key flat map, simple `{var}` substitution. The signature keeps
- * room for a per-guild locale override without restructuring call sites.
+ * Handwritten i18n runtime for the xiangqi plugin.
+ *
+ * Mirrors the bot's pattern (`packages/bot/src/i18n/index.ts`):
+ *   • Locales = "en" | "zh-TW" | "zh-CN"
+ *   • `resolveLocale(interaction)` collapses BCP-47 tags (`en-US`,
+ *     `zh-Hant-HK`, …) into one of the three supported tags, falling
+ *     back through `interaction.locale → interaction.guildLocale → "en"`.
+ *   • `t(locale, key, vars)` looks up a flat dotted key with simple
+ *     `{var}` interpolation. Missing key warns + returns the English
+ *     value (or the key itself when even English is missing).
+ *   • `localizedDescriptions(key, vars?)` returns a Discord-shaped
+ *     `LocalizationMap` covering all three locales for slash command
+ *     `description_localizations` fields.
+ *
+ * Dictionaries live in sibling files (`en.ts`, `zh-TW.ts`, `zh-CN.ts`).
+ * `sideLabel(locale, side)` returns the locale-aware side label
+ * ("Red" / "紅方" / "红方").
  */
 
-export type Locale = "zh-TW";
-const DEFAULT_LOCALE: Locale = "zh-TW";
+import { en } from "./en.js";
+import { zhTW } from "./zh-TW.js";
+import { zhCN } from "./zh-CN.js";
 
-const DICT: Record<Locale, Record<string, string>> = {
-  "zh-TW": {
-    // — plugin meta
-    "plugin.description":
-      "中國象棋對戰：在 channel 內以棋譜術語下棋，附完整圖形 WebUI。",
-    "feature.description":
-      "在頻道內以文字／WebUI 雙介面下中國象棋；支援人對人、人對 AI。",
+export const SUPPORTED_LOCALES = ["en", "zh-TW", "zh-CN"] as const;
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
-    // — top-level command
-    "cmd.description": "中國象棋對戰指令",
-    "cmd.start.description": "開新對局",
-    "cmd.start.opponentOption":
-      "點名對手 (省略則開公開邀請，任何人可按按鈕加入)",
-    "cmd.start.aiLevelOption":
-      "與 AI 對戰並指定難度 (有此選項時不發邀請，直接開局)",
-    "cmd.start.sideOption":
-      "自己執哪方 (red/black)；省略則由對手選 (公開邀請) 或預設執紅 (其他模式)",
-    "cmd.start.clockOption":
-      "時限格式 base+inc 秒 (例：600+30，省略則無時限)",
-    "cmd.start.showBoardOption":
-      "代理走棋時輸出含棋盤的詳細 embed (預設關，僅輸出盲棋術語)",
-    "cmd.stop.description": "中斷目前對局",
-    "cmd.board.description": "印出目前棋盤",
-    "cmd.status.description": "顯示對局者與輪次資訊",
-    "cmd.webui.description": "取得個人 WebUI 連結",
-    "cmd.resign.description": "投降",
-    "cmd.draw.description": "提議和棋 (對手按下接受才生效)",
-    "cmd.takeback.description": "請求悔棋 (對手同意才生效；對 AI 直接退一步)",
-    "cmd.pgn.description": "輸出本局棋譜文字",
-    "cmd.manage.description": "管理頁面 (需 manage 權限)",
+/**
+ * Locale used to (a) fill in missing keys on look-ups and (b) describe
+ * commands when a caller passes `undefined`. We default to English so
+ * Discord shows a sensible canonical description in every guild before
+ * the per-user locale overrides it.
+ */
+const DEFAULT_LOCALE: Locale = "en";
 
-    // — error
-    "error.notInGuild": "此指令僅可在伺服器頻道內使用。",
-    "error.alreadyRunning": "本頻道已有對局進行中。",
-    "error.noGame": "本頻道沒有進行中的對局。",
-    "error.notPlayer": "你不是這場對局的對戰者。",
-    "error.notYourTurn": "現在不是你的回合。",
-    "error.noPermission": "你沒有執行此操作的權限。",
-    "error.cantChallengeBot": "不能挑戰機器人帳號 (請用 npc 選項與 AI 對戰)。",
-    "error.cantChallengeSelf": "不能挑戰自己。",
-    "error.invalidClock": "時限格式錯誤，請用 `base+inc` 秒，例如 `600+30`。",
-    "error.invalidAiLevel": "AI 難度只接受 easy / normal / hard。",
-    "error.invalidSide": "side 只接受 red 或 black。",
-    "error.pendingNotMatch": "目前還在等待接受邀請。",
-
-    // — start / invite
-    "invite.title": "{challenger} 邀請 {opponent} 對局",
-    "invite.descriptionRed": "{challenger} (執紅) vs {opponent} (執黑)",
-    "invite.descriptionBlack": "{challenger} (執黑) vs {opponent} (執紅)",
-    "invite.aiStarting": "{challenger} 與 AI ({level}) 對局開始 — 執{sideZh}",
-    "invite.timeoutNote": "對手按下「接受」即開始。",
-    "invite.acceptBtn": "✅ 接受",
-    "invite.declineBtn": "❌ 拒絕",
-    "invite.cancelBtn": "🚫 取消",
-    "invite.declined": "{opponent} 拒絕了挑戰。",
-    "invite.cancelled": "邀請已取消。",
-    "invite.publicTitle": "{challenger} 發起對局",
-    "invite.publicDescriptionOpen":
-      "{challenger} 在等對手 — 任何人都可按下加入按鈕成為對手。",
-    "invite.publicDescriptionFixedSide":
-      "{challenger} 執{sideZh}，等候對手加入。",
-    "invite.joinRedBtn": "🔴 加入紅方",
-    "invite.joinBlackBtn": "⚫ 加入黑方",
-    "invite.joined": "{opponent} 加入對局，執{sideZh}！",
-    "invite.cantJoinOwn": "你是發起者，不能加入自己的邀請。",
-    "invite.cantCancelOther": "只有發起者可以取消邀請。",
-
-    // — board / status
-    "board.title": "對局 #{shortId}",
-    "board.turnNote": "輪到：{sideZh}",
-    "board.move": "**第 {n} 手 — {sideZh}** {move}",
-    "board.gameOver": "對局結束",
-    "status.movesPlayed": "已下 {n} 手",
-    "status.clock": "時限：紅 {red} / 黑 {black}",
-    "status.clockOff": "無時限",
-    "side.red": "紅方",
-    "side.black": "黑方",
-
-    // — end
-    "end.checkmate": "將死！",
-    "end.stalemate": "困斃 — {sideZh}無路可走",
-    "end.resign": "{sideZh}投降",
-    "end.drawAgreed": "雙方同意和棋",
-    "end.timeout": "{sideZh}超時",
-    "end.halfmove60": "六十著和棋 (連續 60 著未吃子)",
-    "end.repetition": "三次重複局面和棋",
-    "end.aborted": "對局已中斷",
-    "end.winnerRed": "🔴 紅方勝",
-    "end.winnerBlack": "⚫ 黑方勝",
-    "end.draw": "和棋",
-
-    // — draw / takeback / resign
-    "draw.offered": "{sideZh}提議和棋。對手可按下「接受」確認。",
-    "draw.acceptBtn": "✅ 接受和棋",
-    "draw.declineBtn": "❌ 拒絕",
-    "draw.declined": "對手拒絕了和棋提議。",
-    "takeback.offered":
-      "{sideZh}要求悔棋 {plies} 手。對手可按下「同意」確認。",
-    "takeback.acceptBtn": "↩ 同意悔棋",
-    "takeback.declineBtn": "❌ 拒絕",
-    "takeback.declined": "對手拒絕了悔棋請求。",
-    "takeback.appliedAi": "已退回 {plies} 手。",
-    "takeback.applied": "已退回 {plies} 手。",
-
-    // — webui / manage
-    "webui.title": "象棋對局 WebUI",
-    "webui.descriptionPlayer":
-      "點擊下方按鈕進入專屬棋盤。在 WebUI 走子等同於在頻道下棋，bot 會幫你寫出棋譜。",
-    "webui.descriptionSpectator":
-      "你不是本局對局者，但可透過 WebUI 觀棋。",
-    "webui.openButton": "🎯 開啟棋盤",
-    "manage.title": "Karyl Xiangqi 管理",
-    "manage.description": "列出進行中的對局；可強制中斷任何頻道的對局。",
-    "manage.openButton": "🛠 開啟管理頁面",
-    "manage.notAllowed": "你沒有管理權限。",
-    "manage.botRejected": "Bot 拒絕簽發管理 token。",
-  },
+export const DICTIONARIES: Record<Locale, Record<string, string>> = {
+  en,
+  "zh-TW": zhTW,
+  "zh-CN": zhCN,
 };
 
+function isSupportedLocale(tag: string): tag is Locale {
+  return (SUPPORTED_LOCALES as readonly string[]).includes(tag);
+}
+
+/**
+ * Map any BCP-47 tag (Discord sends `en-US`, `zh-TW`, `zh-Hans-CN`,
+ * `ja`, …) onto one of our supported locales. Script subtags
+ * (Hant/Hans) take precedence over region heuristics. Returns null
+ * when the tag is unsupported — the caller (resolveLocale) then steps
+ * down the fallback chain.
+ */
+function normalizeTag(tag: string | null | undefined): Locale | null {
+  if (!tag) return null;
+  if (isSupportedLocale(tag)) return tag;
+  const n = tag.toLowerCase();
+  if (n.startsWith("en")) return "en";
+  if (n.startsWith("zh")) {
+    if (n.includes("hant") || /-(tw|hk|mo)\b/.test(n)) return "zh-TW";
+    if (n.includes("hans") || /-(cn|sg|my)\b/.test(n)) return "zh-CN";
+    // Bare "zh" — default to Simplified (more common globally).
+    return "zh-CN";
+  }
+  return null;
+}
+
+/**
+ * Resolve a Discord interaction (or any object exposing `locale` +
+ * optional `guildLocale`) to one of our supported locales.
+ *
+ * Fallback chain (matches bot/src/i18n/index.ts):
+ *   1. interaction.locale     — user's Discord client locale
+ *   2. interaction.guildLocale — preferred server locale
+ *   3. "en"
+ */
+export function resolveLocale(interaction: {
+  locale?: string | null;
+  guildLocale?: string | null;
+}): Locale {
+  const fromUser = normalizeTag(interaction.locale);
+  if (fromUser) return fromUser;
+  const fromGuild = normalizeTag(interaction.guildLocale);
+  if (fromGuild) return fromGuild;
+  return DEFAULT_LOCALE;
+}
+
+/**
+ * Translate `key` to `locale`. `vars` is the `{var}` interpolation
+ * bag. Missing keys fall back to English, then to the raw key — and
+ * log a warning so typos surface in dev.
+ */
 export function t(
   locale: Locale | undefined,
   key: string,
   vars?: Record<string, string | number>,
 ): string {
-  const dict = DICT[locale ?? DEFAULT_LOCALE];
+  const dict = DICTIONARIES[locale ?? DEFAULT_LOCALE];
   let s = dict[key];
-  if (!s) {
-    s = DICT[DEFAULT_LOCALE][key] ?? key;
+  if (s === undefined) {
+    s = DICTIONARIES[DEFAULT_LOCALE][key];
+    if (s === undefined) {
+      // eslint-disable-next-line no-console
+      console.warn(`[i18n] missing key "${key}" for locale "${locale ?? DEFAULT_LOCALE}"`);
+      return key;
+    }
   }
   if (!vars) return s;
   return s.replace(/\{(\w+)\}/g, (_, k: string) =>
@@ -142,6 +110,32 @@ export function t(
   );
 }
 
-export function sideZh(side: "red" | "black"): string {
-  return side === "red" ? "紅方" : "黑方";
+/** Discord `LocalizationMap`-shaped object. Inlined to avoid a hard
+ *  dependency on discord-api-types in this module. */
+export type LocalizationMap = Partial<Record<string, string>>;
+
+/**
+ * Build a Discord `description_localizations` map covering every
+ * supported locale. Discord uses `en-US` (not `en`) as the English
+ * key, so we expand on the way out. Use at slash-command registration
+ * sites alongside `description: t("en", "…")`.
+ */
+export function localizedDescriptions(
+  key: string,
+  vars?: Record<string, string | number>,
+): LocalizationMap {
+  return {
+    "en-US": t("en", key, vars),
+    "zh-TW": t("zh-TW", key, vars),
+    "zh-CN": t("zh-CN", key, vars),
+  };
+}
+
+/**
+ * Locale-aware side label (e.g. "Red" / "紅方" / "红方"). Pass the
+ * resolved interaction locale for ephemeral replies and the game's
+ * stored locale for shared channel messages.
+ */
+export function sideLabel(locale: Locale | undefined, side: "red" | "black"): string {
+  return t(locale, side === "red" ? "side.red" : "side.black");
 }

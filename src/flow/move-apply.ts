@@ -20,7 +20,7 @@ import { BOARD_TOP_RULE, renderBoardText } from "../game/render.js";
 import { sendMessage } from "./discord.js";
 import { notifyGameChanged } from "./sse.js";
 import { cancelAiStep } from "../engine/npc-driver.js";
-import { t, sideZh } from "../i18n/index.js";
+import { t, sideLabel } from "../i18n/index.js";
 
 /**
  * THE move chokepoint. Both the channel-message watcher and the WebUI
@@ -192,7 +192,7 @@ async function echoBlindMove(
   givesCheck: boolean,
 ): Promise<void> {
   const lines = [record.combined];
-  if (givesCheck) lines.push("➡️ 將軍！");
+  if (givesCheck) lines.push(t(state.locale, "board.checkSuffix"));
   const sent = await sendMessage({
     channelId: state.channelId,
     content: lines.join("\n"),
@@ -213,22 +213,22 @@ async function echoRichMove(
   givesCheck: boolean,
 ): Promise<void> {
   const moveNo = state.history.length;
-  const moveLine = t(undefined, "board.move", {
+  const moveLine = t(state.locale, "board.move", {
     n: moveNo,
-    sideZh: sideZh(record.side),
+    side: sideLabel(state.locale, record.side),
     move: record.combined,
   });
   const lines: string[] = [moveLine];
-  if (givesCheck) lines.push("➡️ 將軍！");
+  if (givesCheck) lines.push(t(state.locale, "board.checkSuffix"));
   if (ended) {
-    if (winner === "red") lines.push(t(undefined, "end.winnerRed"));
-    else if (winner === "black") lines.push(t(undefined, "end.winnerBlack"));
-    else lines.push(t(undefined, "end.draw"));
-    lines.push(reasonText(endReason));
+    if (winner === "red") lines.push(t(state.locale, "end.winnerRed"));
+    else if (winner === "black") lines.push(t(state.locale, "end.winnerBlack"));
+    else lines.push(t(state.locale, "end.draw"));
+    lines.push(reasonText(state, endReason));
   }
 
   const embed: Record<string, unknown> = {
-    title: t(undefined, "board.title", { shortId: state.sessionId.slice(0, 6) }),
+    title: t(state.locale, "board.title", { shortId: state.sessionId.slice(0, 6) }),
     color: ended
       ? winner == null
         ? EMBED_COLOR_DRAW
@@ -260,11 +260,11 @@ async function postEndBanner(
 ): Promise<void> {
   const headline =
     winner === "red"
-      ? t(undefined, "end.winnerRed")
+      ? t(state.locale, "end.winnerRed")
       : winner === "black"
-        ? t(undefined, "end.winnerBlack")
-        : t(undefined, "end.draw");
-  const reason = reasonText(endReason);
+        ? t(state.locale, "end.winnerBlack")
+        : t(state.locale, "end.draw");
+  const reason = reasonText(state, endReason);
 
   let sent: { id: string; channel_id: string } | null = null;
   if (state.showBoard) {
@@ -272,7 +272,7 @@ async function postEndBanner(
       channelId: state.channelId,
       embeds: [
         {
-          title: t(undefined, "board.gameOver"),
+          title: t(state.locale, "board.gameOver"),
           color: winner == null ? EMBED_COLOR_DRAW : EMBED_COLOR_WIN,
           description: [
             headline,
@@ -295,24 +295,28 @@ async function postEndBanner(
   if (sent) state.lastBoardMessageId = sent.id;
 }
 
-function reasonText(reason: EndReason | undefined): string {
+function reasonText(state: GameState, reason: EndReason | undefined): string {
   switch (reason) {
     case "checkmate":
-      return t(undefined, "end.checkmate");
+      return t(state.locale, "end.checkmate");
     case "stalemate":
-      return t(undefined, "end.stalemate", { sideZh: "" });
+      // Stalemate end-reason — the side whose turn it is has no legal
+      // moves. The end-of-game string benefits from naming them; pass an
+      // empty `{side}` when we don't have it (callers that do not know
+      // which side is stuck just get a cleanly-shaped string).
+      return t(state.locale, "end.stalemate", { side: "" });
     case "resign":
-      return t(undefined, "end.resign", { sideZh: "" });
+      return t(state.locale, "end.resign", { side: "" });
     case "draw_agreed":
-      return t(undefined, "end.drawAgreed");
+      return t(state.locale, "end.drawAgreed");
     case "timeout":
-      return t(undefined, "end.timeout", { sideZh: "" });
+      return t(state.locale, "end.timeout", { side: "" });
     case "halfmove_60":
-      return t(undefined, "end.halfmove60");
+      return t(state.locale, "end.halfmove60");
     case "repetition":
-      return t(undefined, "end.repetition");
+      return t(state.locale, "end.repetition");
     case "aborted":
-      return t(undefined, "end.aborted");
+      return t(state.locale, "end.aborted");
     default:
       return "";
   }

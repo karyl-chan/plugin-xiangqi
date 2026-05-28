@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Side } from "../xiangqi/pieces.js";
+import type { Locale } from "../i18n/index.js";
 
 /**
  * "Open" invites — `/xiangqi start` without an `opponent` user. Anyone
@@ -30,6 +31,12 @@ export interface OpenInvite {
   clock: { baseSec: number; incSec: number } | null;
   /** Forwarded to the GameState when this invite is promoted. */
   showBoard: boolean;
+  /**
+   * Locale resolved from the challenger's interaction at invite time.
+   * Forwarded to the promoted GameState so the channel-facing text
+   * stays consistent between the invite post and the active game.
+   */
+  locale: Locale;
   inviteMessageId?: string;
   createdAt: number;
 }

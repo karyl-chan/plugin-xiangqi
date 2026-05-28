@@ -1,31 +1,33 @@
 import type { CommandContext, CommandReply } from "@karyl-chan/plugin-sdk";
-import { t } from "../i18n/index.js";
+import { t, resolveLocale } from "../i18n/index.js";
 import { getEndedGame, getGame } from "../game/store.js";
 import { sideOf } from "../game/state.js";
 import { buildWebuiLinkRow } from "./webui-link.js";
 
 export async function handleWebui(ctx: CommandContext): Promise<CommandReply> {
+  const locale = resolveLocale(ctx);
   const guildId = ctx.guildId;
   const channelId = ctx.channelId;
-  if (!guildId || !channelId) return t(undefined, "error.notInGuild");
+  if (!guildId || !channelId) return t(locale, "error.notInGuild");
   const game = getGame(channelId) ?? getEndedGame(channelId);
-  if (!game) return { content: t(undefined, "error.noGame"), ephemeral: true };
+  if (!game) return { content: t(locale, "error.noGame"), ephemeral: true };
 
   const linkRow = await buildWebuiLinkRow({
     userId: ctx.userId,
     guildId,
     channelId,
     sessionId: game.sessionId,
+    locale,
   });
   if (!linkRow) {
-    return { content: "⚠ 無法產生 WebUI 連結 (publicBaseUrl 或 RPC 不可用)", ephemeral: true };
+    return { content: t(locale, "webui.unavailable"), ephemeral: true };
   }
   const isPlayer = sideOf(game, ctx.userId) !== null;
   const intro = isPlayer
-    ? t(undefined, "webui.descriptionPlayer")
-    : t(undefined, "webui.descriptionSpectator");
+    ? t(locale, "webui.descriptionPlayer")
+    : t(locale, "webui.descriptionSpectator");
   return {
-    content: `🎯 **${t(undefined, "webui.title")}**\n${intro}`,
+    content: `🎯 **${t(locale, "webui.title")}**\n${intro}`,
     components: [linkRow],
     ephemeral: true,
   };

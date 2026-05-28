@@ -1,5 +1,5 @@
 import type { CommandContext, CommandReply } from "@karyl-chan/plugin-sdk";
-import { t } from "../i18n/index.js";
+import { t, resolveLocale } from "../i18n/index.js";
 import { getGame, removeGame, withChannelLock } from "../game/store.js";
 import { sideOf } from "../game/state.js";
 import { notifyGameChanged } from "./sse.js";
@@ -8,8 +8,9 @@ import { cancelAiStep } from "../engine/npc-driver.js";
 import { getOpenInvite, removeOpenInvite } from "./invite-store.js";
 
 export async function handleStop(ctx: CommandContext): Promise<CommandReply> {
+  const locale = resolveLocale(ctx);
   const channelId = ctx.channelId;
-  if (!channelId) return t(undefined, "error.notInGuild");
+  if (!channelId) return t(locale, "error.notInGuild");
   return withChannelLock(channelId, async () => {
     const isAdmin = ctx.hasCapability?.("admin") === true;
 
@@ -18,18 +19,18 @@ export async function handleStop(ctx: CommandContext): Promise<CommandReply> {
     const invite = getOpenInvite(channelId);
     if (invite) {
       if (ctx.userId !== invite.challengerUserId && !isAdmin) {
-        return { content: t(undefined, "invite.cantCancelOther"), ephemeral: true };
+        return { content: t(locale, "invite.cantCancelOther"), ephemeral: true };
       }
       removeOpenInvite(channelId);
-      return { content: t(undefined, "invite.cancelled") };
+      return { content: t(invite.locale, "invite.cancelled") };
     }
 
     const game = getGame(channelId);
-    if (!game) return { content: t(undefined, "error.noGame"), ephemeral: true };
+    if (!game) return { content: t(locale, "error.noGame"), ephemeral: true };
     const isPlayer = sideOf(game, ctx.userId) !== null;
     const isChallenger = game.challengerUserId === ctx.userId;
     if (!isPlayer && !isChallenger && !isAdmin) {
-      return { content: t(undefined, "error.noPermission"), ephemeral: true };
+      return { content: t(locale, "error.noPermission"), ephemeral: true };
     }
     game.status = "aborted";
     game.result = { reason: "aborted", at: Date.now() };
@@ -38,6 +39,6 @@ export async function handleStop(ctx: CommandContext): Promise<CommandReply> {
     cancelAiStep(game.sessionId);
     removeGame(channelId);                // force-stop: do NOT retain
     notifyGameChanged(channelId);
-    return { content: t(undefined, "end.aborted") };
+    return { content: t(game.locale, "end.aborted") };
   });
 }
