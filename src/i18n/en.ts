@@ -19,7 +19,7 @@ export const en: Record<string, string> = {
   "cmd.start.aiLevelOption":
     "Play against the AI at the given difficulty (skips the invite, game starts immediately)",
   "cmd.start.sideOption":
-    "Which side you play (red/black); omit to let the opponent pick (public invite) or default to Red (other modes)",
+    "Which side you play (red/black); omit to let the opponent pick, or default to Red",
   "cmd.start.clockOption":
     "Time control as base+inc seconds (e.g. 600+30; omit for untimed)",
   "cmd.start.showBoardOption":
