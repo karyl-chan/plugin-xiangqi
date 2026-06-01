@@ -38,7 +38,7 @@
           v-for="(label, ci) in BLACK_FILES"
           :key="`bf${ci}`"
           :x="colX(ci)"
-          :y="LABEL_BAND - 8"
+          :y="flip ? HEIGHT - 8 : LABEL_BAND - 8"
           text-anchor="middle"
           font-size="18"
           font-weight="700"
@@ -48,7 +48,7 @@
           v-for="(label, ci) in RED_FILES"
           :key="`rf${ci}`"
           :x="colX(ci)"
-          :y="HEIGHT - 8"
+          :y="flip ? LABEL_BAND - 8 : HEIGHT - 8"
           text-anchor="middle"
           font-size="18"
           font-weight="700"
@@ -151,11 +151,17 @@ const ROW_GAP = (HEIGHT - 2 * Y_MARGIN) / 9;     // = 60 (square cells)
 const BLACK_FILES = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 const RED_FILES = ["九", "八", "七", "六", "五", "四", "三", "二", "一"];
 
+// Black plays from the far side, so rotate the whole board 180° for the
+// black viewer: their pieces sit at the bottom, like red's do for red.
+// Glyphs stay upright (we mirror the coordinate mapping, not the SVG), so
+// only colX/rowY + the file-label bands need to know about the flip.
+const flip = computed(() => props.snapshot?.viewerRole === "black");
+
 function colX(col: number): number {
-  return X_MARGIN + col * CELL;
+  return X_MARGIN + (flip.value ? 8 - col : col) * CELL;
 }
 function rowY(row: number): number {
-  return Y_MARGIN + (9 - row) * ROW_GAP;
+  return Y_MARGIN + (flip.value ? row : 9 - row) * ROW_GAP;
 }
 
 const GLYPHS = {
