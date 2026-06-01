@@ -111,6 +111,15 @@ export const en: Record<string, string> = {
   "takeback.declined": "The opponent declined the takeback request.",
   "takeback.appliedAi": "Rolled back {plies} ply.",
   "takeback.applied": "Rolled back {plies} ply.",
+  "draw.offerTitle": "Draw offer",
+  "takeback.offerTitle": "Takeback request",
+  "pause.title": "⏸ Game paused",
+  "pause.drawPending":
+    "{side} offered a draw — accept or decline it before playing on.",
+  "pause.takebackPending":
+    "{side} requested a takeback of {plies} ply — accept or decline it before playing on.",
+  "pause.cannotMove":
+    "The game is paused on a pending offer — resolve it first.",
 
   // — webui / manage
   "webui.title": "Xiangqi Game WebUI",

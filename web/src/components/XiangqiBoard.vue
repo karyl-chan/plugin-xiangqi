@@ -127,6 +127,8 @@ interface Snapshot {
   viewerRole: "red" | "black" | "spectator";
   legalMovesByFrom: Record<string, { row: number; col: number }[]>;
   status: string;
+  drawOffer: { from: "red" | "black" } | null;
+  takebackOffer: { from: "red" | "black"; plies: number } | null;
 }
 
 const props = defineProps<{ snapshot: Snapshot }>();
@@ -201,9 +203,17 @@ const pieceList = computed<PieceCell[]>(() => {
 
 const selected = ref<{ row: number; col: number } | null>(null);
 
+// A pending draw/takeback offer pauses the game — no moves until it's
+// resolved. (GameBoardView also dims the board + blocks pointer events,
+// but gate here too so a stray click can never slip a move through.)
+const paused = computed(
+  () => props.snapshot?.drawOffer != null || props.snapshot?.takebackOffer != null,
+);
+
 const interactive = computed(
   () =>
     props.snapshot?.status === "active" &&
+    !paused.value &&
     props.snapshot?.viewerRole !== "spectator" &&
     props.snapshot?.viewerRole === props.snapshot?.sideToMove,
 );

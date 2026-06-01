@@ -8,7 +8,27 @@
 
     <div class="layout">
       <div class="panel">
-        <XiangqiBoard v-if="snapshot" :snapshot="snapshot" @move="onMove" />
+        <div v-if="snapshot" class="board-stage">
+          <XiangqiBoard
+            :snapshot="snapshot"
+            :class="{ 'board-dimmed': paused }"
+            @move="onMove"
+          />
+          <div v-if="paused" class="board-overlay">
+            <div class="overlay-card">
+              <div class="overlay-text">{{ pauseText }}</div>
+              <div v-if="canRespond" class="overlay-actions">
+                <AppButton variant="primary" size="sm" :disabled="actionBusy" @click="respondAccept">
+                  {{ acceptLabel }}
+                </AppButton>
+                <AppButton variant="secondary" size="sm" :disabled="actionBusy" @click="respondDecline">
+                  拒絕
+                </AppButton>
+              </div>
+              <div v-else class="overlay-wait subtle">等待對手回應…</div>
+            </div>
+          </div>
+        </div>
         <div v-else class="subtle">等待棋局狀態…</div>
       </div>
       <div class="panel">
@@ -31,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { AppButton } from "@karyl-chan/ui";
 import { useGameBoard } from "../composables/use-game-board";
 import { postGameAction, type GameSession } from "../api";
 import XiangqiBoard from "../components/XiangqiBoard.vue";
@@ -62,6 +83,41 @@ const resultBannerClass = computed(() => {
   if (r.reason === "aborted") return "banner-aborted";
   return "banner-draw";
 });
+
+// — pause overlay (a pending draw / takeback offer halts play) ──────────
+function sideZh(side: "red" | "black"): string {
+  return side === "red" ? "紅" : "黑";
+}
+const drawOffer = computed(() => snapshot.value?.drawOffer ?? null);
+const takebackOffer = computed(() => snapshot.value?.takebackOffer ?? null);
+const paused = computed(() => !!drawOffer.value || !!takebackOffer.value);
+const viewerRole = computed(() => snapshot.value?.viewerRole ?? "spectator");
+
+const pauseText = computed(() => {
+  if (drawOffer.value) {
+    return `${sideZh(drawOffer.value.from)}方提議和棋，接受或拒絕前無法繼續下棋。`;
+  }
+  if (takebackOffer.value) {
+    return `${sideZh(takebackOffer.value.from)}方要求悔棋 ${takebackOffer.value.plies} 手，接受或拒絕前無法繼續下棋。`;
+  }
+  return "";
+});
+const acceptLabel = computed(() => (takebackOffer.value ? "同意" : "接受"));
+const canRespond = computed(() => {
+  const offer = drawOffer.value ?? takebackOffer.value;
+  return (
+    offer != null &&
+    viewerRole.value !== "spectator" &&
+    offer.from !== viewerRole.value
+  );
+});
+
+function respondAccept(): void {
+  void sendAction(drawOffer.value ? "draw-accept" : "takeback-accept");
+}
+function respondDecline(): void {
+  void sendAction(drawOffer.value ? "draw-decline" : "takeback-decline");
+}
 
 async function onMove(from: { row: number; col: number }, to: { row: number; col: number }): Promise<void> {
   const move = `${"abcdefghi"[from.col]}${from.row}${"abcdefghi"[to.col]}${to.row}`;
@@ -95,3 +151,47 @@ function onTakeback(): void {
   void sendAction("takeback-offer");
 }
 </script>
+
+<style scoped>
+.board-stage {
+  position: relative;
+}
+.board-dimmed {
+  opacity: 0.3;
+  filter: blur(1px);
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  pointer-events: none;
+}
+.overlay-card {
+  pointer-events: auto;
+  max-width: 80%;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 18px 20px;
+  text-align: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.overlay-text {
+  font-weight: 600;
+  line-height: 1.5;
+}
+.overlay-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 14px;
+}
+.overlay-wait {
+  margin-top: 12px;
+}
+</style>

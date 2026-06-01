@@ -5,12 +5,34 @@ import type {
   ComponentReply,
 } from "@karyl-chan/plugin-sdk";
 import { t, sideLabel, resolveLocale } from "../i18n/index.js";
+import { EMBED_COLOR_DRAW, EMBED_COLOR_OFFER } from "../constants.js";
 import { getGame, withChannelLock } from "../game/store.js";
-import { sideOf, positionKey, type GameState } from "../game/state.js";
+import {
+  isOfferPending,
+  sideOf,
+  positionKey,
+  type GameState,
+} from "../game/state.js";
 import { initialBoard } from "../xiangqi/board.js";
 import { applyMove } from "../xiangqi/moves.js";
 import { notifyGameChanged } from "./sse.js";
-import { sendMessage, buttonRow, buildCustomId, ephemeralFollowup } from "./discord.js";
+import {
+  sendMessage,
+  deleteMessage,
+  buttonRow,
+  buildCustomId,
+  ephemeralFollowup,
+} from "./discord.js";
+
+/**
+ * Delete the actionable takeback-offer post once it's resolved (Discord
+ * buttons or WebUI), so a stale Agree/Decline row can't be clicked after
+ * the offer is gone.
+ */
+async function deleteTakebackOfferMessage(game: GameState): Promise<void> {
+  const id = game.takebackOffer?.messageId;
+  if (id) await deleteMessage({ channelId: game.channelId, messageId: id });
+}
 
 /**
  * Takeback semantics:
@@ -74,19 +96,30 @@ export async function applyOfferTakebackBySide(
     notifyGameChanged(game.channelId);
     await sendMessage({
       channelId: game.channelId,
-      content: t(game.locale, "takeback.appliedAi", { plies }),
+      embeds: [
+        {
+          color: EMBED_COLOR_DRAW,
+          description: t(game.locale, "takeback.appliedAi", { plies }),
+        },
+      ],
     });
     return { kind: "applied_ai", plies };
   }
 
   game.takebackOffer = { from: side, plies, at: Date.now() };
   notifyGameChanged(game.channelId);
-  await sendMessage({
+  const sent = await sendMessage({
     channelId: game.channelId,
-    content: t(game.locale, "takeback.offered", {
-      side: sideLabel(game.locale, side),
-      plies,
-    }),
+    embeds: [
+      {
+        title: t(game.locale, "takeback.offerTitle"),
+        color: EMBED_COLOR_OFFER,
+        description: t(game.locale, "takeback.offered", {
+          side: sideLabel(game.locale, side),
+          plies,
+        }),
+      },
+    ],
     components: [
       buttonRow([
         {
@@ -102,20 +135,45 @@ export async function applyOfferTakebackBySide(
       ]),
     ],
   });
+  if (sent && game.takebackOffer) game.takebackOffer.messageId = sent.id;
   return { kind: "offered", plies };
 }
 
-export function applyAcceptTakebackBySide(game: GameState): { plies: 1 | 2 } {
+export async function applyAcceptTakebackBySide(
+  game: GameState,
+): Promise<{ plies: 1 | 2 }> {
   const plies = game.takebackOffer!.plies;
+  await deleteTakebackOfferMessage(game);
   rollbackPlies(game, plies);
   game.takebackOffer = undefined;
   notifyGameChanged(game.channelId);
+  await sendMessage({
+    channelId: game.channelId,
+    embeds: [
+      {
+        color: EMBED_COLOR_DRAW,
+        description: t(game.locale, "takeback.applied", { plies }),
+      },
+    ],
+  });
   return { plies };
 }
 
-export function applyDeclineTakebackBySide(game: GameState): void {
+export async function applyDeclineTakebackBySide(
+  game: GameState,
+): Promise<void> {
+  await deleteTakebackOfferMessage(game);
   game.takebackOffer = undefined;
   notifyGameChanged(game.channelId);
+  await sendMessage({
+    channelId: game.channelId,
+    embeds: [
+      {
+        color: EMBED_COLOR_DRAW,
+        description: t(game.locale, "takeback.declined"),
+      },
+    ],
+  });
 }
 
 export async function handleTakeback(ctx: CommandContext): Promise<CommandReply> {
@@ -129,13 +187,19 @@ export async function handleTakeback(ctx: CommandContext): Promise<CommandReply>
     }
     const side = sideOf(game, ctx.userId);
     if (!side) return { content: t(ctxLocale, "error.notPlayer"), ephemeral: true };
+    if (isOfferPending(game)) {
+      return { content: t(ctxLocale, "pause.cannotMove"), ephemeral: true };
+    }
     const outcome = await applyOfferTakebackBySide(game, side);
     if (outcome.kind === "no_history") {
       return { content: t(ctxLocale, "error.noGame"), ephemeral: true };
     }
     if (outcome.kind === "applied_ai") {
+      // The public "rolled back" embed is posted by the shared helper;
+      // this is just the requester's private ack.
       return {
         content: t(ctxLocale, "takeback.appliedAi", { plies: outcome.plies }),
+        ephemeral: true,
       };
     }
     return {
@@ -169,11 +233,9 @@ export async function handleTakebackAcceptButton(
       await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
-    const { plies } = applyAcceptTakebackBySide(game);
-    return {
-      content: t(game.locale, "takeback.applied", { plies }),
-      components: [],
-    };
+    // Deletes the offer post (this message) and posts the applied embed.
+    await applyAcceptTakebackBySide(game);
+    return;
   });
 }
 
@@ -198,7 +260,8 @@ export async function handleTakebackDeclineButton(
       await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
-    applyDeclineTakebackBySide(game);
-    return { content: t(game.locale, "takeback.declined"), components: [] };
+    // Deletes the offer post (this message) and posts the declined embed.
+    await applyDeclineTakebackBySide(game);
+    return;
   });
 }

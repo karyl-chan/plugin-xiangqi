@@ -5,17 +5,35 @@ import type {
   ComponentReply,
 } from "@karyl-chan/plugin-sdk";
 import { t, sideLabel, resolveLocale } from "../i18n/index.js";
+import { EMBED_COLOR_DRAW, EMBED_COLOR_OFFER } from "../constants.js";
 import {
   getGame,
   retainEndedGame,
   withChannelLock,
 } from "../game/store.js";
-import { sideOf, type GameState } from "../game/state.js";
+import { isOfferPending, sideOf, type GameState } from "../game/state.js";
 import { type Side } from "../xiangqi/pieces.js";
 import { notifyGameChanged } from "./sse.js";
-import { sendMessage, buttonRow, buildCustomId, ephemeralFollowup } from "./discord.js";
+import {
+  sendMessage,
+  deleteMessage,
+  buttonRow,
+  buildCustomId,
+  ephemeralFollowup,
+} from "./discord.js";
 import { stopClockTicker } from "./clock.js";
 import { cancelAiStep } from "../engine/npc-driver.js";
+
+/**
+ * Delete the actionable draw-offer post once it's been resolved (from
+ * either the Discord buttons or the WebUI), so a stale Accept/Decline
+ * row can't be clicked after the offer is gone. No-op when the offer was
+ * never posted to the channel (e.g. vs-AI).
+ */
+async function deleteDrawOfferMessage(game: GameState): Promise<void> {
+  const id = game.drawOffer?.messageId;
+  if (id) await deleteMessage({ channelId: game.channelId, messageId: id });
+}
 
 export type DrawOfferResult = "offered" | "vs_ai_declined";
 
@@ -34,11 +52,17 @@ export async function applyOfferDrawBySide(
   if (opponent.kind === "ai") return "vs_ai_declined";
   game.drawOffer = { from: side, at: Date.now() };
   notifyGameChanged(game.channelId);
-  await sendMessage({
+  const sent = await sendMessage({
     channelId: game.channelId,
-    content: t(game.locale, "draw.offered", {
-      side: sideLabel(game.locale, side),
-    }),
+    embeds: [
+      {
+        title: t(game.locale, "draw.offerTitle"),
+        color: EMBED_COLOR_OFFER,
+        description: t(game.locale, "draw.offered", {
+          side: sideLabel(game.locale, side),
+        }),
+      },
+    ],
     components: [
       buttonRow([
         {
@@ -54,10 +78,12 @@ export async function applyOfferDrawBySide(
       ]),
     ],
   });
+  if (sent && game.drawOffer) game.drawOffer.messageId = sent.id;
   return "offered";
 }
 
 export async function applyAcceptDrawBySide(game: GameState): Promise<void> {
+  await deleteDrawOfferMessage(game);
   game.status = "draw";
   game.result = { reason: "draw_agreed", at: Date.now() };
   game.endedAt = Date.now();
@@ -71,15 +97,26 @@ export async function applyAcceptDrawBySide(game: GameState): Promise<void> {
     embeds: [
       {
         title: t(game.locale, "board.gameOver"),
+        color: EMBED_COLOR_DRAW,
         description: t(game.locale, "end.drawAgreed"),
       },
     ],
   });
 }
 
-export function applyDeclineDrawBySide(game: GameState): void {
+export async function applyDeclineDrawBySide(game: GameState): Promise<void> {
+  await deleteDrawOfferMessage(game);
   game.drawOffer = undefined;
   notifyGameChanged(game.channelId);
+  await sendMessage({
+    channelId: game.channelId,
+    embeds: [
+      {
+        color: EMBED_COLOR_DRAW,
+        description: t(game.locale, "draw.declined"),
+      },
+    ],
+  });
 }
 
 export async function handleDraw(ctx: CommandContext): Promise<CommandReply> {
@@ -94,6 +131,9 @@ export async function handleDraw(ctx: CommandContext): Promise<CommandReply> {
     const side = sideOf(game, ctx.userId);
     if (!side) {
       return { content: t(ctxLocale, "error.notPlayer"), ephemeral: true };
+    }
+    if (isOfferPending(game)) {
+      return { content: t(ctxLocale, "pause.cannotMove"), ephemeral: true };
     }
     const result = await applyOfferDrawBySide(game, side);
     if (result === "vs_ai_declined") {
@@ -129,8 +169,10 @@ export async function handleDrawAcceptButton(
       await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
+    // applyAcceptDrawBySide deletes the offer post (this very message) and
+    // posts the game-over embed, so we don't edit the message here.
     await applyAcceptDrawBySide(game);
-    return { content: t(game.locale, "end.drawAgreed"), components: [] };
+    return;
   });
 }
 
@@ -155,7 +197,8 @@ export async function handleDrawDeclineButton(
       await ephemeralFollowup(ctx, t(ctxLocale, "error.noPermission"));
       return;
     }
-    applyDeclineDrawBySide(game);
-    return { content: t(game.locale, "draw.declined"), components: [] };
+    // Deletes the offer post (this message) and posts the declined embed.
+    await applyDeclineDrawBySide(game);
+    return;
   });
 }

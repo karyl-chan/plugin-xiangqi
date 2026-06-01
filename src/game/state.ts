@@ -55,11 +55,15 @@ export interface ClockState {
 export interface DrawOffer {
   from: Side;
   at: number;
+  /** Discord message id of the actionable offer post, for later deletion. */
+  messageId?: string;
 }
 export interface TakebackOffer {
   from: Side;
   plies: 1 | 2;
   at: number;
+  /** Discord message id of the actionable offer post, for later deletion. */
+  messageId?: string;
 }
 
 export type EndReason =
@@ -177,6 +181,15 @@ export function buildPendingGame(opts: {
     locale: opts.locale,
     createdAt: Date.now(),
   };
+}
+
+/**
+ * True while a draw or takeback offer is awaiting a response. The game
+ * is "paused" in this state: no moves may be played (from the channel or
+ * the WebUI) until the offer is accepted or declined.
+ */
+export function isOfferPending(state: GameState): boolean {
+  return state.drawOffer != null || state.takebackOffer != null;
 }
 
 /** Look up the side a player is on, or null if they're not playing. */

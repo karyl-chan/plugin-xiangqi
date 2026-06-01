@@ -6,5 +6,7 @@ export const GUILD_FEATURE_KEY = "xiangqi";
 export const EMBED_COLOR = 0xb33a3a;
 export const EMBED_COLOR_WIN = 0x52a052;
 export const EMBED_COLOR_DRAW = 0x8a8a8a;
+/** Amber — actionable offers (draw / takeback) and "game paused" prompts. */
+export const EMBED_COLOR_OFFER = 0xd8a657;
 
 export const ENDED_GAME_TTL_MS = 10 * 60_000;

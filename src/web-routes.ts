@@ -13,6 +13,7 @@ import {
   type PluginSessionClaims,
 } from "@karyl-chan/plugin-sdk";
 import { PLUGIN_KEY } from "./constants.js";
+import { t } from "./i18n/index.js";
 import {
   issueManagePair,
   verifyManageToken,
@@ -26,7 +27,7 @@ import {
   withChannelLock,
 } from "./game/store.js";
 import { buildSnapshot } from "./game/snapshot.js";
-import { sideOf } from "./game/state.js";
+import { isOfferPending, sideOf } from "./game/state.js";
 import { parseAny } from "./xiangqi/notation/parse.js";
 import { parseIccs } from "./xiangqi/notation/parse-iccs.js";
 import { applyMoveToGame, isMoversTurn } from "./flow/move-apply.js";
@@ -266,6 +267,10 @@ export async function registerWebRoutes(server: FastifyInstance): Promise<void> 
         return { error: "not a player" };
       }
       if (type === "move") {
+        if (isOfferPending(game)) {
+          reply.code(409);
+          return { error: t(game.locale, "pause.cannotMove") };
+        }
         if (!isMoversTurn(game, side)) {
           reply.code(409);
           return { error: "not your turn" };
@@ -297,9 +302,9 @@ export async function registerWebRoutes(server: FastifyInstance): Promise<void> 
         return { ok: true };
       }
       if (type === "draw-offer") {
-        if (game.drawOffer) {
+        if (isOfferPending(game)) {
           reply.code(409);
-          return { error: "draw offer already pending" };
+          return { error: "an offer is already pending" };
         }
         const r = await applyOfferDrawBySide(game, side);
         if (r === "vs_ai_declined") return { ok: true, declined: true };
@@ -315,13 +320,13 @@ export async function registerWebRoutes(server: FastifyInstance): Promise<void> 
           return { error: "cannot resolve own offer" };
         }
         if (type === "draw-accept") await applyAcceptDrawBySide(game);
-        else applyDeclineDrawBySide(game);
+        else await applyDeclineDrawBySide(game);
         return { ok: true };
       }
       if (type === "takeback-offer") {
-        if (game.takebackOffer) {
+        if (isOfferPending(game)) {
           reply.code(409);
-          return { error: "takeback offer already pending" };
+          return { error: "an offer is already pending" };
         }
         const outcome = await applyOfferTakebackBySide(game, side);
         if (outcome.kind === "no_history") {
@@ -339,8 +344,8 @@ export async function registerWebRoutes(server: FastifyInstance): Promise<void> 
           reply.code(403);
           return { error: "cannot resolve own offer" };
         }
-        if (type === "takeback-accept") applyAcceptTakebackBySide(game);
-        else applyDeclineTakebackBySide(game);
+        if (type === "takeback-accept") await applyAcceptTakebackBySide(game);
+        else await applyDeclineTakebackBySide(game);
         return { ok: true };
       }
       reply.code(400);

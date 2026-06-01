@@ -8,9 +8,23 @@ import {
 import { sideOf, type GameState } from "../game/state.js";
 import { otherSide, type Side } from "../xiangqi/pieces.js";
 import { notifyGameChanged } from "./sse.js";
-import { sendMessage } from "./discord.js";
+import { sendMessage, deleteMessage } from "./discord.js";
 import { stopClockTicker } from "./clock.js";
 import { cancelAiStep } from "../engine/npc-driver.js";
+
+/**
+ * Drop any pending draw/takeback offer when the game ends another way
+ * (e.g. resign), deleting the now-stale actionable post so its buttons
+ * can't be clicked after the game is over.
+ */
+async function clearPendingOffers(game: GameState): Promise<void> {
+  const ids = [game.drawOffer?.messageId, game.takebackOffer?.messageId];
+  game.drawOffer = undefined;
+  game.takebackOffer = undefined;
+  for (const id of ids) {
+    if (id) await deleteMessage({ channelId: game.channelId, messageId: id });
+  }
+}
 
 /**
  * Apply the resign mutation + side effects (clock stop, AI cancel,
@@ -23,6 +37,7 @@ export async function applyResignBySide(
   game: GameState,
   side: Side,
 ): Promise<void> {
+  await clearPendingOffers(game);
   const winnerSide = otherSide(side);
   game.status = winnerSide === "red" ? "red_win" : "black_win";
   game.result = { winner: winnerSide, reason: "resign", at: Date.now() };

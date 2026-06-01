@@ -39,8 +39,8 @@
 
     <div class="action-row" v-if="snapshot.status === 'active' && snapshot.viewerRole !== 'spectator'">
       <AppButton variant="danger" size="sm" :disabled="busy" @click="$emit('resign')">投降</AppButton>
-      <AppButton variant="secondary" size="sm" :disabled="busy || !!snapshot.drawOffer" @click="$emit('draw')">提和</AppButton>
-      <AppButton variant="secondary" size="sm" :disabled="busy || !!snapshot.takebackOffer" @click="$emit('takeback')">悔棋</AppButton>
+      <AppButton variant="secondary" size="sm" :disabled="busy || offerPending" @click="$emit('draw')">提和</AppButton>
+      <AppButton variant="secondary" size="sm" :disabled="busy || offerPending" @click="$emit('takeback')">悔棋</AppButton>
     </div>
 
     <h4 style="margin-top:16px">棋譜</h4>
@@ -80,6 +80,10 @@ defineEmits<{
   (e: "takeback-accept"): void;
   (e: "takeback-decline"): void;
 }>();
+
+const offerPending = computed(
+  () => props.snapshot.drawOffer != null || props.snapshot.takebackOffer != null,
+);
 
 const canRespondToDraw = computed(
   () =>

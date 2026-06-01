@@ -1,11 +1,44 @@
 import { getGame, withChannelLock } from "../game/store.js";
-import { sideOf } from "../game/state.js";
+import { isOfferPending, sideOf, type GameState } from "../game/state.js";
 import { parseAny } from "../xiangqi/notation/parse.js";
 import { applyMoveToGame, isMoversTurn } from "./move-apply.js";
 import { tickClockOnMove } from "./clock.js";
 import { scheduleAiStep } from "../engine/npc-driver.js";
-import { addReaction } from "./discord.js";
+import { addReaction, sendMessage } from "./discord.js";
+import { t, sideLabel } from "../i18n/index.js";
+import { EMBED_COLOR_OFFER } from "../constants.js";
 import { runtime } from "../runtime.js";
+
+/**
+ * The game is paused on a pending draw/takeback offer, but a player just
+ * typed move notation into the channel. Post an embed reminder that the
+ * offer must be resolved first — the move is NOT applied.
+ */
+async function postPauseReminder(game: GameState): Promise<void> {
+  let description: string;
+  if (game.drawOffer) {
+    description = t(game.locale, "pause.drawPending", {
+      side: sideLabel(game.locale, game.drawOffer.from),
+    });
+  } else if (game.takebackOffer) {
+    description = t(game.locale, "pause.takebackPending", {
+      side: sideLabel(game.locale, game.takebackOffer.from),
+      plies: game.takebackOffer.plies,
+    });
+  } else {
+    return;
+  }
+  await sendMessage({
+    channelId: game.channelId,
+    embeds: [
+      {
+        title: t(game.locale, "pause.title"),
+        color: EMBED_COLOR_OFFER,
+        description,
+      },
+    ],
+  });
+}
 
 /**
  * Inbound `guild.message_create` handler. Filters non-game messages out
@@ -35,9 +68,16 @@ export async function onGuildMessageCreate(payload: {
     if (!game || game.status !== "active") return false;
     const movingSide = sideOf(game, payload.author.id);
     if (!movingSide) return false;
-    if (!isMoversTurn(game, movingSide)) return false;
+    // Parse first so we can tell a move attempt apart from normal chat.
     const parsed = parseAny(payload.content!, game.board, movingSide);
     if (!parsed) return false;
+    // Paused on a pending offer: a typed move is met with a reminder, not
+    // applied — neither side may move until the offer is resolved.
+    if (isOfferPending(game)) {
+      await postPauseReminder(game);
+      return false;
+    }
+    if (!isMoversTurn(game, movingSide)) return false;
     try {
       await applyMoveToGame(game, movingSide, parsed.from, parsed.to, {
         source: "channel-message",

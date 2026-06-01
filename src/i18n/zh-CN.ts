@@ -110,6 +110,13 @@ export const zhCN: Record<string, string> = {
   "takeback.declined": "对手拒绝了悔棋请求。",
   "takeback.appliedAi": "已退回 {plies} 手。",
   "takeback.applied": "已退回 {plies} 手。",
+  "draw.offerTitle": "和棋提议",
+  "takeback.offerTitle": "悔棋请求",
+  "pause.title": "⏸ 对局暂停",
+  "pause.drawPending": "{side}提议和棋——请先接受或拒绝才能继续下棋。",
+  "pause.takebackPending":
+    "{side}要求悔棋 {plies} 手——请先接受或拒绝才能继续下棋。",
+  "pause.cannotMove": "对局因提议暂停中，请先处理该提议再走子。",
 
   // — webui / manage
   "webui.title": "象棋对局 WebUI",
