@@ -26,6 +26,36 @@ import {
 import { otherSide, type Side } from "../xiangqi/pieces.js";
 
 /**
+ * Hand the user who just accepted/joined their OWN personal WebUI link,
+ * ephemerally. Every WebUI link bakes a per-user session token into the
+ * URL (it IS the viewer's identity), so a link can never be shared in a
+ * channel message — the other player clicking it would authenticate as
+ * whoever's token was baked in and find themselves locked out on their
+ * own turn. The opponent gets their board via `/xiangqi webui` instead
+ * (see the `webui.openHint` line on the public join message).
+ */
+async function sendPersonalWebuiLink(
+  ctx: ComponentContext,
+  game: GameState,
+  locale: ReturnType<typeof resolveLocale>,
+): Promise<void> {
+  if (!ctx.channelId) return;
+  const linkRow = await buildWebuiLinkRow({
+    userId: ctx.userId,
+    guildId: game.guildId,
+    channelId: ctx.channelId,
+    sessionId: game.sessionId,
+    locale,
+  });
+  if (!linkRow) return;
+  await ephemeralFollowup(
+    ctx,
+    `🎯 **${t(locale, "webui.title")}**\n${t(locale, "webui.descriptionPlayer")}`,
+    [linkRow],
+  );
+}
+
+/**
  * Move a game from `pending_accept` into `active`: stamp acceptance,
  * post the initial board, kick off the AI / clock, and notify any
  * WebUI subscribers.
@@ -118,22 +148,19 @@ export async function handleAcceptButton(
       return;
     }
     await startActiveGame(game);
-    const linkRow = await buildWebuiLinkRow({
-      userId: ctx.userId,
-      guildId: game.guildId,
-      channelId,
-      sessionId: game.sessionId,
-      locale: ctxLocale,
-    });
+    await sendPersonalWebuiLink(ctx, game, ctxLocale);
     return {
-      content: t(game.locale, "invite.joined", {
-        opponent: ctx.userDisplayName ?? ctx.userId,
-        side: sideLabel(
-          game.locale,
-          game.red.userId === ctx.userId ? "red" : "black",
-        ),
-      }),
-      components: linkRow ? [linkRow] : [],
+      content:
+        t(game.locale, "invite.joined", {
+          opponent: ctx.userDisplayName ?? ctx.userId,
+          side: sideLabel(
+            game.locale,
+            game.red.userId === ctx.userId ? "red" : "black",
+          ),
+        }) +
+        "\n" +
+        t(game.locale, "webui.openHint"),
+      components: [],
     };
   });
 }
@@ -274,19 +301,16 @@ async function promoteInviteToGame(
   removeOpenInvite(invite.channelId);
   await startActiveGame(game);
 
-  const linkRow = await buildWebuiLinkRow({
-    userId: ctx.userId,
-    guildId: invite.guildId,
-    channelId: invite.channelId,
-    sessionId: game.sessionId,
-    locale: ctxLocale,
-  });
+  await sendPersonalWebuiLink(ctx, game, ctxLocale);
   return {
-    content: t(game.locale, "invite.joined", {
-      opponent: joiner.displayName,
-      side: sideLabel(game.locale, joinerSide),
-    }),
-    components: linkRow ? [linkRow] : [],
+    content:
+      t(game.locale, "invite.joined", {
+        opponent: joiner.displayName,
+        side: sideLabel(game.locale, joinerSide),
+      }) +
+      "\n" +
+      t(game.locale, "webui.openHint"),
+    components: [],
   };
 }
 

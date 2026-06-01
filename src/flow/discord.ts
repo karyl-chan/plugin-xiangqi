@@ -125,10 +125,12 @@ export function buildCustomId(componentId: string, tail?: string): string {
 export async function ephemeralFollowup(
   ctx: ComponentContext,
   content: string,
+  components?: MessageActionRow[],
 ): Promise<void> {
   await ctx.discord.interactions.followup({
     interactionToken: ctx.interactionToken,
     content,
     ephemeral: true,
+    ...(components && components.length > 0 ? { components } : {}),
   });
 }

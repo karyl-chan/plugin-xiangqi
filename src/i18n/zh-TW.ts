@@ -118,6 +118,8 @@ export const zhTW: Record<string, string> = {
   "webui.descriptionSpectator":
     "你不是本局對局者，但可透過 WebUI 觀棋。",
   "webui.openButton": "🎯 開啟棋盤",
+  "webui.openHint":
+    "雙方請各自用 `/xiangqi webui` 開啟自己的棋盤（每個 WebUI 連結都是個人專屬，請勿分享）。",
   "webui.unavailable": "⚠ 無法產生 WebUI 連結 (publicBaseUrl 或 RPC 不可用)",
   "manage.title": "Karyl Xiangqi 管理",
   "manage.description": "列出進行中的對局；可強制中斷任何頻道的對局。",

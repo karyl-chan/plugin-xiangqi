@@ -119,6 +119,8 @@ export const en: Record<string, string> = {
   "webui.descriptionSpectator":
     "You are not a player in this game, but you can spectate via the WebUI.",
   "webui.openButton": "🎯 Open board",
+  "webui.openHint":
+    "Each player: open your own board with `/xiangqi webui` (every WebUI link is personal — don't share it).",
   "webui.unavailable": "⚠ Could not produce a WebUI link (publicBaseUrl or RPC unavailable).",
   "manage.title": "Karyl Xiangqi admin",
   "manage.description": "List active games; force-stop any channel's game.",
