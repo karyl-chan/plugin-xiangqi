@@ -4,6 +4,7 @@ import {
   definePluginCapability,
   definePluginCommand,
   definePluginComponent,
+  defineWebUI,
   type CommandContext,
   type CommandOption,
   type CommandReply,
@@ -27,7 +28,6 @@ import { handleResign } from "./flow/resign.js";
 import { handleDraw } from "./flow/draw.js";
 import { handleTakeback } from "./flow/takeback.js";
 import { handlePgn } from "./flow/pgn-cmd.js";
-import { handleManage } from "./flow/manage-cmd.js";
 import { onComponent } from "./flow/dispatcher.js";
 import { registerWebRoutes, setPublicUrlEnvFallback } from "./web-routes.js";
 import { onGuildMessageCreate } from "./flow/move-watcher.js";
@@ -208,10 +208,6 @@ export function buildPlugin() {
                   { type: "sub_command", name: "pgn", description: "" },
                   "cmd.pgn.description",
                 ),
-                locOption(
-                  { type: "sub_command", name: "manage", description: "" },
-                  "cmd.manage.description",
-                ),
               ],
               handler: async (ctx: CommandContext): Promise<CommandReply> => {
                 const sub = ctx.subCommandName;
@@ -234,8 +230,6 @@ export function buildPlugin() {
                     return handleTakeback(ctx);
                   case "pgn":
                     return handlePgn(ctx);
-                  case "manage":
-                    return handleManage(ctx);
                   default:
                     return { content: "Unknown subcommand", ephemeral: true };
                 }
@@ -296,6 +290,10 @@ export function buildPlugin() {
         description: "Access the Karyl Xiangqi admin WebUI (list / force-stop games).",
       }),
     ],
+    // Manage WebUI is reached from the bot admin plugin page (which mints a
+    // manage token for the logged-in admin), served at <base>/manage. The
+    // `manage` capability above gates that admin-UI link.
+    webUI: defineWebUI(),
     eventHandlers: {
       // SDK verifies HMAC + parses JSON; we narrow + forward to the
       // move-watcher. Throws inside the handler are caught and logged

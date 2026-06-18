@@ -196,7 +196,11 @@ function serveSpa(reply: FastifyReply): string {
 
 export async function registerWebRoutes(server: FastifyInstance): Promise<void> {
   // — SPA
+  // Game (session) tier — webui buttons link here with a session token.
+  // Manage tier — the bot admin UI links to /manage with a manage token;
+  // same SPA bundle, the client picks the flow from the path.
   server.get("/", async (_req, reply) => serveSpa(reply));
+  server.get("/manage", async (_req, reply) => serveSpa(reply));
   // The bot proxies `…/plugin/karyl-xiangqi` (no trailing slash) with a
   // 301 → `…/plugin/karyl-xiangqi/`, so this exact-`/` route is the only
   // SPA entry point. We don't mount a wildcard fallback because that
