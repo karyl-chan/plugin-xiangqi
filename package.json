@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@iconify/vue": "^5.0.0",
-    "@karyl-chan/plugin-sdk": "^0.12.0",
+    "@karyl-chan/plugin-sdk": "^0.16.0",
     "@karyl-chan/ui": "^0.4.0",
     "@popperjs/core": "^2.11.8",
     "nanoid": "^3.3.11",
