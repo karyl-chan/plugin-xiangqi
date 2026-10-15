@@ -6,7 +6,13 @@
  * the rest of the code reads them through runtime().
  */
 
-import type { Discord, Logger, Voice } from "@karyl-chan/plugin-sdk";
+import {
+  createPluginRpc,
+  type Auth,
+  type Discord,
+  type Logger,
+  type Voice,
+} from "@karyl-chan/plugin-sdk";
 
 export interface XiangqiRuntime {
   botRpc: (path: string, body?: unknown) => Promise<unknown | null>;
@@ -14,6 +20,8 @@ export interface XiangqiRuntime {
   discord: Discord;
   /** Typed Voice RPC facade. */
   voice: Voice;
+  /** Typed session-token minting facade. */
+  auth: Auth;
   log: Logger;
   publicBaseUrl: () => string | undefined;
   /** Ed25519 SPKI PEM that signs plugin-session JWTs. */
@@ -57,7 +65,19 @@ function withTimeout(
 }
 
 export function wireRuntime(rt: XiangqiRuntime): void {
-  _rt = { ...rt, botRpc: withTimeout(rt.botRpc, rt.log) };
+  const botRpc = withTimeout(rt.botRpc, rt.log);
+  const rpc = createPluginRpc(async (path, body) => {
+    const result = await botRpc(path, body);
+    if (result === null) throw new Error(`bot RPC failed: ${path}`);
+    return result;
+  });
+  _rt = {
+    ...rt,
+    botRpc,
+    discord: rpc.discord,
+    voice: rpc.voice,
+    auth: rpc.auth,
+  };
 }
 
 export function runtime(): XiangqiRuntime {

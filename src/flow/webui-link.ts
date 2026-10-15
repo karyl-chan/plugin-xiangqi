@@ -23,12 +23,14 @@ export async function buildWebuiLinkRow(opts: {
   sessionId: string;
   locale?: Locale;
 }): Promise<MessageActionRow | null> {
-  const res = (await runtime().botRpc("/api/plugin/auth.session", {
-    user_id: opts.userId,
-    kind: "session",
-    guild_id: opts.guildId,
-  })) as { allowed?: boolean; token?: string } | null;
-  if (res?.allowed !== true || typeof res.token !== "string") return null;
+  const res = await runtime()
+    .auth.mintSession({
+      userId: opts.userId,
+      kind: "session",
+      guildId: opts.guildId,
+    })
+    .catch(() => ({ allowed: false }) as const);
+  if (!res.allowed) return null;
   const base = runtime().publicBaseUrl();
   if (!base) return null;
   const url = `${base.replace(/\/+$/, "")}/?token=${res.token}&c=${opts.channelId}&s=${opts.sessionId}`;
