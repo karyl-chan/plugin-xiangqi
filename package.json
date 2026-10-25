@@ -1,6 +1,6 @@
 {
   "name": "@karyl-chan/plugin-xiangqi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Discord chess bot — Chinese chess (Xiangqi) live games played through channel text moves with an optional bidirectional WebUI.",
   "type": "module",
   "private": true,
